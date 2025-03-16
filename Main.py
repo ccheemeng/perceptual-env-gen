@@ -7,15 +7,16 @@ from argparse import ArgumentParser, Namespace
 from json import load
 
 def main(args: Namespace) -> None:
-    samples: GeoDataFrame = read_file(args.fp[0])
+    querySamples: GeoDataFrame = read_file(args.fp[0])
+    siteSamples: GeoDataFrame = read_file(args.fp[1])
     site: list[Polygon] = list()
     geometry: Geometry
-    for geometry in read_file(args.fp[1])["geometry"].values:
+    for geometry in read_file(args.fp[2])["geometry"].values:
         site.extend(geometryToPolygons(geometry))
-    validateInput(samples, site)
-    queryCollection: Collection = Collection.fromGeoDataFrame(samples)
-    siteCollection: Collection = Collection.fromGeoDataFrame()
-    simulator: Simulator = Simulator(readCollection)
+    validateInput(querySamples, siteSamples, site)
+    queryCollection: Collection = Collection.fromGeoDataFrame(querySamples)
+    siteCollection: Collection = Collection.fromGeoDataFrame(siteSamples)
+    simulator: Simulator = Simulator(queryCollection, siteCollection)
     polygon: Polygon
     for polygon in site:
         simulator.run(polygon)
@@ -34,10 +35,12 @@ def geometryToPolygons(geometry: Geometry) -> list[Polygon]:
     return list()
 
 def validateInput(
-        samples: GeoDataFrame,
+        querySamples: GeoDataFrame,
+        siteSamples: GeoDataFrame,
         site: list[Polygon]
 ) -> None:
-    validateSamples(samples)
+    validateSamples(querySamples)
+    validateSamples(siteSamples)
     validateSite(site)
 
 def validateSamples(samples: GeoDataFrame) -> None:
@@ -62,8 +65,11 @@ def validateSite(site: list[Polygon]) -> None:
 if __name__ == "__main__":
     parser: ArgumentParser = ArgumentParser()
     parser.add_argument(
-        "--fp", nargs=2, type=str, required=True,
-        help="GeoJSON filepaths for (1) samples and (2) site (multi)polygon"
+        "--fp", nargs=3, type=str, required=True,
+        help=(
+            "GeoJSON filepaths for (1) query samples, "
+            "(2) site samples, and (3) site (multi)polygon"
+        )
     )
     args: Namespace = parser.parse_args()
     main(args)

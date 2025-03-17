@@ -1,12 +1,14 @@
-from geopandas import read_file, GeoDataFrame # type: ignore
+from geopandas import GeoDataFrame, read_file # type: ignore
 from shapely import Geometry, GeometryCollection, MultiPolygon, Polygon
 
 from source import Collection, Simulator
 
 from argparse import ArgumentParser, Namespace
 from json import load
+from random import Random
 
 def main(args: Namespace) -> None:
+    random: Random = Random(args.seed)
     querySamples: GeoDataFrame = read_file(args.fp[0])
     siteSamples: GeoDataFrame = read_file(args.fp[1])
     site: list[Polygon] = list()
@@ -14,8 +16,8 @@ def main(args: Namespace) -> None:
     for geometry in read_file(args.fp[2])["geometry"].values:
         site.extend(geometryToPolygons(geometry))
     validateInput(querySamples, siteSamples, site)
-    queryCollection: Collection = Collection.fromGeoDataFrame(querySamples)
-    siteCollection: Collection = Collection.fromGeoDataFrame(siteSamples)
+    queryCollection: Collection = Collection.fromGeoDataFrame(querySamples, random=random)
+    siteCollection: Collection = Collection.fromGeoDataFrame(siteSamples, random=random)
     simulator: Simulator = Simulator(queryCollection, siteCollection)
     polygon: Polygon
     for polygon in site:
@@ -70,6 +72,10 @@ if __name__ == "__main__":
             "GeoJSON filepaths for (1) query samples, "
             "(2) site samples, and (3) site (multi)polygon"
         )
+    )
+    parser.add_argument(
+        "--seed", type=str, required=False, default='0',
+        help=("Seed for RNG")
     )
     args: Namespace = parser.parse_args()
     main(args)

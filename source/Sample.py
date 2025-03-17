@@ -17,6 +17,9 @@ class Sample:
     def getId(self) -> str:
         return self.id
 
+    def getPoint(self) -> Point:
+        return self.point
+
     def getCluster(self) -> int:
         return self.cluster
     

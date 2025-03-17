@@ -6,29 +6,27 @@ from .Sample import Sample
 from .Perception import Perception
 
 from typing import Self
+from random import Random
 
 class Collection:
     RADIUS: float = 100
 
     def __init__(
-        self,
-        samples: dict[str, Sample], sampleAttributes,
+        self, samples: dict[str, Sample],
         perceptions: dict[str, Perception], perceptionAttributes: DataFrame
     ) -> None:
         self.samples: dict[str, Sample] = samples
-        self.sampleAttributes: DataFrame = sampleAttributes
         self.perceptions: dict[str, Perception] = perceptions
         self.perceptionAttributes: DataFrame = perceptionAttributes
 
     @classmethod
-    def fromGeoDataFrame(cls, gdf: GeoDataFrame, radius: float = RADIUS) -> Self:
+    def fromGeoDataFrame(cls, gdf: GeoDataFrame,
+        radius: float = RADIUS, random: Random = Random(0)) -> Self:
         samples: dict[str, Sample] = Collection.initSamples(gdf, radius)
-        sampleAttributes: DataFrame = gdf.drop("geometry", axis=1)
         perceptions: dict[str, Perception] =\
-            Collection.initPerceptions(gdf, samples, radius)
-        perceptionAttributes: DataFrame =\
-            Collection.initPerceptionAttributes(sampleAttributes, perceptions)
-        return cls(samples, sampleAttributes, perceptions, perceptionAttributes)
+            Collection.initPerceptions(gdf, samples, radius, random)
+        perceptionAttributes: DataFrame = gdf.drop("geometry", axis=1)
+        return cls(samples, perceptions, perceptionAttributes)
 
     @staticmethod
     def initSamples(gdf: GeoDataFrame, radius: float) -> dict[str, Sample]:
@@ -44,7 +42,7 @@ class Collection:
 
     @staticmethod
     def initPerceptions(
-        gdf: GeoDataFrame, samples: dict[str, Sample], radius: float
+        gdf: GeoDataFrame, samples: dict[str, Sample], radius: float, random: Random
     ) -> dict[str, Perception]:
         perceptions: dict[str, Perception] = dict()
         gdf.sindex
@@ -56,27 +54,11 @@ class Collection:
                     gdf.loc[id, "geometry"].buffer(radius), predicate="contains"
                 )].index
             ]
-            perceptions[id] = Perception(sample, radius, sampleList)
+            perceptions[id] = Perception(sample, radius, sampleList, random)
         return perceptions
-
-    @staticmethod
-    def initPerceptionAttributes(
-        sampleAttributes: DataFrame,
-        perceptions: dict[str, Perception]
-    ) -> DataFrame:
-        return concat((
-            sampleAttributes.apply(
-                lambda row: sampleAttributes.loc[
-                    sampleAttributes.index.isin([
-                        sample.getId() for sample in perceptions[row.name]\
-                            .getSamples()
-                    ])
-                ].drop("cluster", axis=1).sum(axis=0), axis=1
-            ),
-            sampleAttributes["cluster"]
-        ), axis=1)
     
     def perceptionsWithin(self, polygon: Polygon) -> dict[str, Perception]:
         id: str
         perception: Perception
-        return {id: perception for id, perception in self.perceptions.items() if perception.within(polygon)}
+        return {id: perception for id, perception in self.perceptions.items()
+                if perception.within(polygon)}

@@ -1,4 +1,4 @@
-from geopandas import GeoDataFrame, read_file # type: ignore
+from geopandas import GeoDataFrame, read_file # type: ignore[import-untyped]
 from shapely import Geometry, GeometryCollection, MultiPolygon, Polygon
 
 from source import Collection, Simulator
@@ -24,6 +24,7 @@ def main(args: Namespace) -> None:
         simulator.run(polygon)
     return
 
+# to delegate to geometry helper class
 def geometryToPolygons(geometry: Geometry) -> list[Polygon]:
     if isinstance(geometry, Polygon):
         return [geometry]

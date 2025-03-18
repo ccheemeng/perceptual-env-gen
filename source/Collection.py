@@ -1,11 +1,11 @@
-from geopandas import GeoDataFrame # type: ignore
+from geopandas import GeoDataFrame # type: ignore[import-untyped]
 from pandas import concat, DataFrame, Series
 from shapely import Point, Polygon
 
 from .Sample import Sample
 from .Perception import Perception
 
-from typing import Self
+from typing import Hashable, Self, Union
 from random import Random
 
 class Collection:
@@ -65,3 +65,28 @@ class Collection:
         perception: Perception
         return {id: perception for id, perception in self.perceptions.items()
                 if perception.within(polygon)}
+    
+    def getPerception(self, perceptionId: str) -> Perception:
+        return self.perceptions[perceptionId]
+    
+    def findSimilar(self, query: Perception, limit: int = 1) -> Union[tuple[Perception, float], list[tuple[Perception, float]]]:
+        perceptionDistances: dict[str, tuple[float, float]] =\
+            {id: Collection.calculateDistance(perception, query) for id, perception in self.perceptions.items()}
+        perceptionDf: DataFrame = DataFrame.from_dict(perceptionDistances, orient="index", columns=["distance", "rotation"]).sort_values("distance", axis=0).head(limit)
+        similar: list[tuple[Perception, float]] = list()
+        i: int = 0
+        index: Hashable
+        row: Series
+        for index, row in perceptionDf.iterrows():
+            if i >= limit:
+                break
+            similar.append((self.perceptions[str(index)], row["rotation"]))
+        if limit == 1:
+            return similar[0]
+        return similar
+    
+    @staticmethod
+    def calculateDistance(p1: Perception, p2: Perception) -> tuple[float, float]:
+        rotation: float = Perception.rotation(p1, p2)
+        distance: float = Perception.distance(p1, p2, rotation)
+        return (distance, rotation)

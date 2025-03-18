@@ -1,6 +1,6 @@
 from numpy import float64, ndarray, atan2
-from scipy.linalg import svd # type: ignore
-from scipy.stats import wasserstein_distance_nd # type: ignore
+from scipy.linalg import svd # type: ignore[import-untyped]
+from scipy.stats import wasserstein_distance_nd # type: ignore[import-untyped]
 from shapely import MultiPoint, Point, Polygon
 
 from .Sample import Sample
@@ -159,6 +159,15 @@ class Perception:
         x: float = point[0]
         y: float = point[1]
         return (x * cos(theta) - y * sin(theta), x * sin(theta) + y * cos(theta))
+    
+    def getId(self) -> str:
+        return self.id
+    
+    def getPoint(self) -> Point:
+        return self.sample.getPoint()
+    
+    def perceptionZone(self) -> Polygon:
+        return self.sample.getPoint().buffer(self.radius)
 
     def getSamples(self) -> list[Sample]:
         return self.samples

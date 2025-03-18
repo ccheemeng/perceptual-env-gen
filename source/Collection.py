@@ -57,6 +57,9 @@ class Collection:
             perceptions[id] = Perception(sample, radius, sampleList, random)
         return perceptions
     
+    def getPerceptions(self) -> dict[str, Perception]:
+        return self.perceptions
+
     def perceptionsWithin(self, polygon: Polygon) -> dict[str, Perception]:
         id: str
         perception: Perception

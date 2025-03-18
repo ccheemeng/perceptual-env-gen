@@ -67,9 +67,8 @@ class Perception:
     
     # asymmetric
     @staticmethod
-    def distance(p1: Self, p2: Self) -> float: # type: ignore
+    def distance(p1: Self, p2: Self, rotation: float) -> float: # type: ignore[misc]
         totalDistance: float = 0
-        rotation: float = Perception.rotation(p1, p2)
         clusters: set[int] = set(p1.sampleMap.keys()).union(set(p2.sampleMap.keys()))
         for cluster in clusters:
             clusterRotation: float = rotation
@@ -112,7 +111,7 @@ class Perception:
 
     # returns angle p2 must rotate about its sample centre counterclockwise
     @staticmethod
-    def rotation(p1: Self, p2: Self) -> float: # type: ignore
+    def rotation(p1: Self, p2: Self) -> float: # type: ignore[misc]
         p1SampleCounts: dict[int, int] = p1.sampleCounts()
         p2SampleCounts: dict[int, int] = p2.sampleCounts()
         clusterIntersection: set[int] = set(p1SampleCounts.keys())\
@@ -167,8 +166,11 @@ class Perception:
     def within(self, polygon: Polygon) -> bool:
         return self.sample.within(polygon)
 
-    def distanceTo(self, other: Self) -> float:
-        return Perception.distance(self, other)
+    def distanceTo(self, other: Self, rotation: float) -> float:
+        return Perception.distance(self, other, rotation)
+
+    def rotationTo(self, other: Self) -> float:
+        return Perception.rotation(self, other)
 
     def sampleCounts(self) -> dict[int, int]:
         sampleCounts: dict[int, int] = dict()

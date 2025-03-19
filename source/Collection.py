@@ -5,8 +5,9 @@ from shapely import Point, Polygon
 from .Sample import Sample
 from .Perception import Perception
 
-from typing import Hashable, Self, Union
 from random import Random
+import time
+from typing import Hashable, Self, Union
 
 class Collection:
     RADIUS: float = 100
@@ -70,8 +71,13 @@ class Collection:
         return self.perceptions[perceptionId]
     
     def findSimilar(self, query: Perception, limit: int = 1) -> Union[tuple[Perception, float], list[tuple[Perception, float]]]:
+        # start = time.time()
+        # perceptionDistances: dict[str, tuple[float, float]] =\
+        #     {id: Collection.calculateDistance(perception, query) for id, perception in self.perceptions.items()}
+        # end = time.time()
+        # print(f"{query} query took {end - start} seconds")
         perceptionDistances: dict[str, tuple[float, float]] =\
-            {id: Collection.calculateDistance(perception, query) for id, perception in self.perceptions.items()}
+            {id: (0, 0) for id, perception in self.perceptions.items()} # ARBITRARY RETURN FOR FAST TESTING
         perceptionDf: DataFrame = DataFrame.from_dict(perceptionDistances, orient="index", columns=["distance", "rotation"]).sort_values("distance", axis=0).head(limit)
         similar: list[tuple[Perception, float]] = list()
         i: int = 0
@@ -80,13 +86,16 @@ class Collection:
         for index, row in perceptionDf.iterrows():
             if i >= limit:
                 break
-            similar.append((self.perceptions[str(index)], row["rotation"]))
+            similar.append((self.perceptions[index], row["rotation"]))
         if limit == 1:
             return similar[0]
         return similar
     
     @staticmethod
     def calculateDistance(p1: Perception, p2: Perception) -> tuple[float, float]:
+        start = time.time()
         rotation: float = Perception.rotation(p1, p2)
         distance: float = Perception.distance(p1, p2, rotation)
+        end = time.time()
+        print(f"distance from {p1} to {p2} took {end - start} seconds")
         return (distance, rotation)

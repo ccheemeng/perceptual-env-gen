@@ -19,9 +19,12 @@ def main(args: Namespace) -> None:
     queryCollection: Collection = Collection.fromGeoDataFrame(querySamples, random=random)
     siteCollection: Collection = Collection.fromGeoDataFrame(siteSamples, random=random)
     simulator: Simulator = Simulator(queryCollection, siteCollection)
+    output: list[list[tuple[str, Polygon, tuple[float, float], float]]] = list()
     polygon: Polygon
     for polygon in site:
-        simulator.run(polygon)
+        output.append(simulator.run(polygon))
+    with open("idk.txt", 'w') as fp:
+        fp.write(output.__repr__())
     return
 
 # to delegate to geometry helper class

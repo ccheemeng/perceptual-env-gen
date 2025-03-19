@@ -51,6 +51,7 @@ class Simulator:
             perceptionId: str = generator[0]
             generatingPolygon: Polygon = generator[1]
             sitePerception: Perception = self.siteCollection.getPerception(perceptionId)
+            print(f"querying for {generator}")
             similarPerception: Perception
             rotation: float
             similarPerception, rotation = self.queryCollection.findSimilar(sitePerception) # type: ignore[assignment]
@@ -73,10 +74,10 @@ class Simulator:
         pointsGdf["distanceToPolygon"] = pointsGdf.apply(lambda row: row["geometry"].distance(polygon), axis=1)
         numPoints = ceil(polygon.area / self.mean_polygon_area)
         pointsGdf = pointsGdf.loc[pointsGdf["distanceToPolygon"] <= self.max_gen_dist].sort_values("distanceToPolygon", axis=0).head(numPoints)
-        voronoiPolygons: list[Polygon] = list(voronoi_polygons(pointsGdf["geometry"]).geoms)
+        voronoiPolygons: list[Polygon] = list(voronoi_polygons(pointsGdf.geometry, extend_to=polygon))
         ids: list[str] = list(pointsGdf.index)
-        if len(voronoiPolygons) != len(ids):
-            raise ValueError("No 1:1 mapping between site points and site polygons!")
+        assert len(voronoiPolygons) == len(ids),\
+            "No 1:1 mapping between site points and site polygons!"
         generators: list[tuple[str, Polygon]] = list()
         for i in range(len(ids)):
             id: str = ids[i]

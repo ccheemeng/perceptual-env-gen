@@ -7,14 +7,12 @@ from .Sample import Sample
 
 from collections.abc import Collection
 from math import pi as PI, cos, sin
-from random import Random
 from typing import Self
 from queue import PriorityQueue
 
 class Perception:
     def __init__(self, sample: Sample, radius: float,
-                 samples: Collection[Sample],
-                 random: Random = Random(0)) -> None:
+                 samples: Collection[Sample]) -> None:
         self.id: str = sample.getId()
         self.sample: Sample = sample
         self.radius: float = radius
@@ -23,7 +21,7 @@ class Perception:
         self.sampleMap: dict[int, tuple[Sample, ...]] = sampleMap
         # dict[cluster, tuple[tuple[singlularValue, rightSingularVector], ...]]
         self.svd: dict[int, tuple[tuple[float64, ndarray], ...]] =\
-            Perception.initSvd(sample, sampleMap, random)
+            Perception.initSvd(sample, sampleMap)
 
     def __repr__(self) -> str:
         return (
@@ -47,8 +45,8 @@ class Perception:
         return sampleImMap
 
     @staticmethod
-    def initSvd(sample: Sample, sampleMap: dict[int, tuple[Sample, ...]],
-                random: Random = Random(0)) -> dict[int, tuple[tuple[float64, ndarray], ...]]:
+    def initSvd(sample: Sample, sampleMap: dict[int, tuple[Sample, ...]])\
+        -> dict[int, tuple[tuple[float64, ndarray], ...]]:
         clusterSvd: dict[int, tuple[tuple[float64, ndarray], ...]] = dict()
         cluster: int
         samples: tuple[Sample, ...]

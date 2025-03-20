@@ -1,7 +1,7 @@
 from geopandas import GeoDataFrame, read_file # type: ignore[import-untyped]
-from shapely import Geometry, GeometryCollection, MultiPolygon, Polygon
+from shapely import Geometry, GeometryCollection, MultiPolygon, Point, Polygon
 
-from source import Collection, Simulator
+from source import Collection, Simulator, Writer
 
 from argparse import ArgumentParser, Namespace
 from json import load
@@ -16,15 +16,14 @@ def main(args: Namespace) -> None:
     for geometry in read_file(args.fp[2])["geometry"].values:
         site.extend(geometryToPolygons(geometry))
     validateInput(querySamples, siteSamples, site)
-    queryCollection: Collection = Collection.fromGeoDataFrame(querySamples, random=random)
-    siteCollection: Collection = Collection.fromGeoDataFrame(siteSamples, random=random)
+    queryCollection: Collection = Collection.fromGeoDataFrame(querySamples)
+    siteCollection: Collection = Collection.fromGeoDataFrame(siteSamples)
     simulator: Simulator = Simulator(queryCollection, siteCollection)
-    output: list[list[tuple[str, Polygon, tuple[float, float], float]]] = list()
+    output: list[tuple[Polygon, list[tuple[Point, Point, float, Polygon]]]] = list()
     polygon: Polygon
     for polygon in site:
-        output.append(simulator.run(polygon))
-    with open("idk.txt", 'w') as fp:
-        fp.write(output.__repr__())
+        output.append((polygon, simulator.run(polygon)))
+    Writer(args.out).write(output)
     return
 
 # to delegate to geometry helper class
@@ -76,6 +75,10 @@ if __name__ == "__main__":
             "GeoJSON filepaths for (1) query samples, "
             "(2) site samples, and (3) site (multi)polygon"
         )
+    )
+    parser.add_argument(
+        "--out", type=str, default="out",
+        help="output directory"
     )
     parser.add_argument(
         "--seed", type=str, required=False, default='0',

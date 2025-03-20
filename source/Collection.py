@@ -5,7 +5,6 @@ from shapely import Point, Polygon
 from .Sample import Sample
 from .Perception import Perception
 
-from random import Random
 import time
 from typing import Hashable, Self, Union
 
@@ -22,10 +21,10 @@ class Collection:
 
     @classmethod
     def fromGeoDataFrame(cls, gdf: GeoDataFrame,
-        radius: float = RADIUS, random: Random = Random(0)) -> Self:
+        radius: float = RADIUS) -> Self:
         samples: dict[str, Sample] = Collection.initSamples(gdf, radius)
         perceptions: dict[str, Perception] =\
-            Collection.initPerceptions(gdf, samples, radius, random)
+            Collection.initPerceptions(gdf, samples, radius)
         perceptionAttributes: DataFrame = gdf.drop("geometry", axis=1)
         return cls(samples, perceptions, perceptionAttributes)
 
@@ -43,7 +42,7 @@ class Collection:
 
     @staticmethod
     def initPerceptions(
-        gdf: GeoDataFrame, samples: dict[str, Sample], radius: float, random: Random
+        gdf: GeoDataFrame, samples: dict[str, Sample], radius: float
     ) -> dict[str, Perception]:
         perceptions: dict[str, Perception] = dict()
         gdf.sindex
@@ -55,7 +54,7 @@ class Collection:
                     gdf.loc[id, "geometry"].buffer(radius), predicate="contains"
                 )].index
             ]
-            perceptions[id] = Perception(sample, radius, sampleList, random)
+            perceptions[id] = Perception(sample, radius, sampleList)
         return perceptions
     
     def getPerceptions(self) -> dict[str, Perception]:

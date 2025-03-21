@@ -69,16 +69,14 @@ class Simulator:
             remainingPolygons = list(filter(lambda p: not p.is_empty, remainingPolygons))
             leftoverPolygons.extend(remainingPolygons)
             generated.append((similarPerception.getPoint(), sitePerception.getPoint(), rotation, generatedPolygon))
-        print(f"Leftover: {leftoverPolygons}")
         return (generated, leftoverPolygons)
 
     def findGenerators(self, polygon: Polygon) -> list[tuple[str, Polygon]]:
-        print(polygon)
         points: dict[str, Point] = {id: perception.getPoint()\
                                     for id, perception in self.siteCollection.getPerceptions().items()}
         pointsGdf: GeoDataFrame = GeoDataFrame(DataFrame\
                 .from_dict(points, orient="index", columns=["geometry"]), crs=self.crs)
-        pointsGdf["distanceToPolygon"] = pointsGdf.apply(lambda row: row["geometry"].distance(polygon), axis=1)
+        pointsGdf["distanceToPolygon"] = pointsGdf.apply(lambda row: row["geometry"].distance(polygon.centroid), axis=1)
         numPoints = ceil(polygon.area / self.mean_polygon_area)
         pointsGdf = pointsGdf.loc[pointsGdf["distanceToPolygon"] <= self.max_gen_dist].sort_values("distanceToPolygon", axis=0).head(numPoints)
         voronoiPolygons: list[Polygon] = Simulator.geometryToPolygons(voronoi_polygons(MultiPoint(list(pointsGdf.geometry)), extend_to=polygon))

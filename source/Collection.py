@@ -70,13 +70,13 @@ class Collection:
         return self.perceptions[perceptionId]
     
     def findSimilar(self, query: Perception, limit: int = 1) -> Union[tuple[Perception, float], list[tuple[Perception, float]]]:
-        # start = time.time()
-        # perceptionDistances: dict[str, tuple[float, float]] =\
-        #     {id: Collection.calculateDistance(perception, query) for id, perception in self.perceptions.items()}
-        # end = time.time()
-        # print(f"{query} query took {end - start} seconds")
+        start = time.time()
         perceptionDistances: dict[str, tuple[float, float]] =\
-            {id: (0, 0) for id, perception in self.perceptions.items()} # ARBITRARY RETURN FOR FAST TESTING
+            {id: Collection.calculateDistance(perception, query) for id, perception in self.perceptions.items()}
+        end = time.time()
+        print(f"{query} query took {end - start} seconds")
+        # perceptionDistances: dict[str, tuple[float, float]] =\
+        #     {id: (0, 0) for id, perception in self.perceptions.items()} # ARBITRARY RETURN FOR FAST TESTING
         perceptionDf: DataFrame = DataFrame.from_dict(perceptionDistances, orient="index", columns=["distance", "rotation"]).sort_values("distance", axis=0).head(limit)
         similar: list[tuple[Perception, float]] = list()
         i: int = 0
@@ -92,9 +92,6 @@ class Collection:
     
     @staticmethod
     def calculateDistance(p1: Perception, p2: Perception) -> tuple[float, float]:
-        start = time.time()
         rotation: float = Perception.rotation(p1, p2)
         distance: float = Perception.distance(p1, p2, rotation)
-        end = time.time()
-        print(f"distance from {p1} to {p2} took {end - start} seconds")
         return (distance, rotation)

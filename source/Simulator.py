@@ -13,19 +13,15 @@ from typing import Union
 
 class Simulator:
     SG_CRS: CRS = CRS.from_user_input(3414)
-    MAX_GEN_DIST: float = 100
-    MEAN_POLYGON_AREA: float = 500
+    MAX_GEN_DIST: float = 40
 
     def __init__(self, queryCollection: Collection, siteCollection: Collection,
-                 crs: CRS = SG_CRS, max_gen_dist: float = MAX_GEN_DIST,
-                 mean_polygon_area: float = MEAN_POLYGON_AREA):
+                 crs: CRS = SG_CRS, max_gen_dist: float = MAX_GEN_DIST) -> None:
         self.queryCollection: Collection = queryCollection
-        self.siteCollection: Collection = siteCollection
         self.crs: CRS = crs
         self.max_gen_dist = max_gen_dist
-        self.mean_polygon_area = mean_polygon_area
 
-    def run(self, site: Polygon) -> list[tuple[Point, Point, float, Polygon]]:
+    def run(self, site: Polygon, siteCollection: Collection) -> list[tuple[Point, Point, float, Polygon]]:
         polygonQueue: Queue[Polygon] = Queue()
         polygonQueue.put(site)
         # list[tuple[sampleId, sitePolygon, translationXY, ccwRotation]]
@@ -34,42 +30,55 @@ class Simulator:
             polygon: Polygon = polygonQueue.get()
             generated: list[tuple[Point, Point, float, Polygon]]
             remainingPolygons: list[Polygon]
-            generated, remainingPolygons = self.generate(polygon)
+            newCollection: Collection
+            generated, remainingPolygons, newCollection = self.generate(polygon, siteCollection)
             generation.extend(generated)
             remainingPolygon: Polygon
             for remainingPolygon in remainingPolygons:
                 polygonQueue.put(remainingPolygon)
+            siteCollection = newCollection
             print("===========================================")
         return generation
 
-    def generate(self, polygon: Polygon) ->\
-        tuple[list[tuple[Point, Point, float, Polygon]], list[Polygon]]:
-        generators: list[tuple[str, Polygon]] = self.findGenerators(polygon)
-        generated: list[tuple[Point, Point, float, Polygon]] = list()
+    def generate(self, polygon: Polygon, siteCollection: Collection) ->\
+        tuple[list[tuple[Perception, Perception, float, Polygon]], list[Polygon], Collection]:
+        generators: list[tuple[Perception, Polygon]] = self.findGenerators(polygon, siteCollection)
+        generated: list[tuple[Perception, Perception, float, Polygon]] = list()
         leftoverPolygons: list[Polygon] = list()
-        generator: tuple[str, Polygon]
+        generator: tuple[Perception, Polygon]
         for generator in generators:
-            perceptionId: str = generator[0]
+            sitePerception: Perception = generator[0]
             generatingPolygon: Polygon = generator[1]
-            sitePerception: Perception = self.siteCollection.getPerception(perceptionId)
-            generatedPolygon: Geometry = intersection(
-                sitePerception.perceptionZone(), generatingPolygon) # guaranteed Polygon
+            print(f"querying for {generator}")
+            similarPerception: Perception
+            rotation: float
+            similarPerception, rotation = self.queryCollection.findSimilar(sitePerception) # type: ignore[assignment]
+            generatedPolygon: Polygon = Simulator.rotate(similarPerception.getRegion(), similarPerception.getPoint(), rotation)
+            generatedPolygon = intersection(generatedPolygon, generatingPolygon) # guaranteed Polygon
             assert(isinstance(generatedPolygon, Polygon))
             if generatedPolygon.is_empty:
                 # assigned generating Perception is out of range
                 # add to leftovers for next iter of finding
                 leftoverPolygons.append(generatingPolygon)
                 continue
-            print(f"querying for {generator}")
-            similarPerception: Perception
-            rotation: float
-            similarPerception, rotation = self.queryCollection.findSimilar(sitePerception) # type: ignore[assignment]
-
-            remainingPolygons: list[Polygon] = Simulator.geometryToPolygons(difference(generatingPolygon, sitePerception.perceptionZone()))
+            generated.append((similarPerception, sitePerception, rotation, generatedPolygon))
+            remainingPolygons: list[Polygon] = Simulator.geometryToPolygons(difference(generatingPolygon, generatedPolygon))
             remainingPolygons = list(filter(lambda p: not p.is_empty, remainingPolygons))
             leftoverPolygons.extend(remainingPolygons)
-            generated.append((similarPerception.getPoint(), sitePerception.getPoint(), rotation, generatedPolygon))
-        return (generated, leftoverPolygons)
+        siteCollection = siteCollection.update(generated, self.queryCollection)
+        # for each added perception (translate and rotate)
+        # consider all samples within the generated polygon
+        # (except the sample associated with the site perception if it is within the generated polygon).
+        # take the region of the perception associated with that sample (translated and rotated)
+        # and create a new perception
+        # with svds calculated from the translated and rotated region
+        # and samples in the translated and rotated region (including added samples within all generatedPolygons).
+        # add that perception to the sitecollection
+        # be careful of existing ids
+        # perception shouldnt provide some kind of translation and rotation function
+        # ideally collection gets the region from perception
+        # and a geometry helper class translates and rotates the region
+        return (generated, leftoverPolygons, siteCollection)
 
     def findGenerators(self, polygon: Polygon) -> list[tuple[str, Polygon]]:
         points: dict[str, Point] = {id: perception.getPoint()\

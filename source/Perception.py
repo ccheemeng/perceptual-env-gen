@@ -11,11 +11,11 @@ from typing import Self
 from queue import PriorityQueue
 
 class Perception:
-    def __init__(self, sample: Sample, radius: float,
+    def __init__(self, sample: Sample, region: Polygon,
                  samples: Collection[Sample]) -> None:
         self.id: str = sample.getId()
         self.sample: Sample = sample
-        self.radius: float = radius
+        self.region: Polygon = region
         self.samples: list[Sample] = list(samples)
         sampleMap: dict[int, tuple[Sample, ...]] = Perception.mapSamples(samples)
         self.sampleMap: dict[int, tuple[Sample, ...]] = sampleMap
@@ -25,8 +25,7 @@ class Perception:
 
     def __repr__(self) -> str:
         return (
-            f"{self.sample.__repr__()}: "
-            f"r={self.radius}, {len(self.samples)} samples"
+            f"{self.sample.__repr__()}: {len(self.samples)} samples"
         )
     
     @staticmethod
@@ -164,8 +163,8 @@ class Perception:
     def getPoint(self) -> Point:
         return self.sample.getPoint()
     
-    def perceptionZone(self) -> Polygon:
-        return self.sample.getPoint().buffer(self.radius)
+    def getRegion(self) -> Polygon:
+        return self.region
 
     def getSamples(self) -> list[Sample]:
         return self.samples

@@ -37,7 +37,7 @@ class Perception:
     @staticmethod
     def findCluster(point: Point, samples: Collection[Sample]) -> int:
         sampleDistances: list[tuple[float, Sample]] = [(point.distance(sample.getPoint()), sample) for sample in samples]
-        sampleDistances.sort()
+        sampleDistances.sort(key=lambda x: x[0])
         return sampleDistances[0][1].getCluster()
     
     @staticmethod

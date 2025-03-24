@@ -8,15 +8,16 @@ def main(args: Namespace) -> None:
     queryCollection: Collection = IO.initCollection(args.query_fps[0], args.query_fps[1], args.query_fps[2])
     siteCollection: Collection = IO.initCollection(args.site_fps[0], args.site_fps[1], args.site_fps[2])
     sitePolygons: list[tuple[str, Polygon]] = IO.initPolygons(args.polygon_fp)
+    siteCollection = siteCollection.filter([polygon for id, polygon in sitePolygons])
     simulator: Simulator = Simulator(queryCollection)
-    generations: list[tuple[str, list[tuple[Perception, Point, float, Polygon]]]]
+    generations: list[tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...]]]]] = list()
     id: str
     sitePolygon: Polygon
     for id, sitePolygon in sitePolygons:
         generations.append((id, simulator.run(sitePolygon, siteCollection)))
-    generation: tuple[str, list[tuple[Perception, Point, float, Polygon]]]
+    generation: tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...]]]]
     for generation in generations:
-        IO.write(generation[0], generation[1])
+        IO.write(args.out, generation[0], generation[1])
 
 if __name__ == "__main__":
     parser: ArgumentParser = ArgumentParser()

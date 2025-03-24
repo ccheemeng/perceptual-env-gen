@@ -1,5 +1,6 @@
-from shapely import Point, Polygon
+from shapely import MultiPolygon, Point, Polygon, union_all
 
+from .Geometric import Geometric
 from .Perception import Perception
 from .Sample import Sample
 
@@ -7,8 +8,11 @@ from time import time
 from typing import Collection as CollectionType, Self, Sequence
 
 class Collection:
-    def __init__(self, perceptions: CollectionType[Perception]) -> None:
+    PERCEPTION_RADIUS: float = 100
+
+    def __init__(self, perceptions: CollectionType[Perception], perception_radius: float = PERCEPTION_RADIUS) -> None:
         self.perceptions: tuple[Perception, ...] = tuple(perceptions)
+        self.perception_radius = perception_radius
 
     def __repr__(self) -> str:
         return f"Collection: {len(self.perceptions)}"
@@ -20,6 +24,8 @@ class Collection:
         perceptions: list[Perception] = list()
         i: int
         for i in range(len(ids)):
+            if i % 100 == 0:
+                print(i)
             perceptions.append(Perception(ids[i], points[i], regions[i], samples))
         return cls(perceptions)
     
@@ -42,10 +48,29 @@ class Collection:
             distance: float
             rotation, distance = Collection.calculateDistance(perception, query)
             perceptionDistances.append((distance, perception, rotation))
-        perceptionDistances.sort()
+        perceptionDistances.sort(key=lambda x: x[0])
         end = time()
         print(f"Query took {end - start} s")
         return tuple(perceptionDistances)
+
+    def filter(self, sitePolygons: list[Polygon]) -> Self:
+        sitePerceptionZones: list[Polygon] = Geometric.geometryToPolygons(union_all([sitePolygon.buffer(self.perception_radius) for sitePolygon in sitePolygons]))
+        sitePerceptionZone: MultiPolygon = MultiPolygon(sitePerceptionZones)
+        newPerceptions: list[Perception] = list()
+        perception: Perception
+        for perception in self.perceptions:
+            if perception.getPoint().within(sitePerceptionZone):
+                newPerceptions.append(perception)
+        sampleSet: set[Sample] = set()
+        for perception in newPerceptions:
+            sampleSet.update(perception.getSamples())
+        return Collection.fromIdsPointsRegionsSamples(
+            [perception.getId() for perception in newPerceptions],
+            [perception.getPoint() for perception in newPerceptions],
+            [perception.getRegion() for perception in newPerceptions],
+            sampleSet
+        ) # type: ignore[return-value]
+        
     
     def update(self, newIds: Sequence[str], newPoints: Sequence[Point], newRegions: Sequence[Polygon], newSamples: CollectionType[Sample]) -> Self:
         ids: list[str] = [perception.getId() for perception in self.perceptions]
@@ -77,7 +102,7 @@ class Collection:
         if len(matchingPerceptions) <= 0:
             raise IndexError(f"No perception in {self.__repr__()} found from {sample.__repr__()}!")
         perceptionDistances: list[tuple[float, Perception]] = [(perception.getPoint().distance(sample.getPoint()), perception) for perception in matchingPerceptions]
-        perceptionDistances.sort()
+        perceptionDistances.sort(key=lambda x: x[0])
         return perceptionDistances[0][1]
     
     def getPerceptions(self) -> list[Perception]:

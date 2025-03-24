@@ -1,4 +1,4 @@
-from shapely import MultiPoint, Point, Polygon, difference, intersection, voronoi_polygons
+from shapely import Geometry, MultiPoint, MultiPolygon, Point, Polygon, difference, intersection, union_all, voronoi_polygons
 
 from .Collection import Collection
 from .Geometric import Geometric
@@ -14,15 +14,16 @@ class Simulator:
         self.queryCollection: Collection = queryCollection
         self.max_gen_dist: float = max_gen_dist
 
-    def run(self, site: Polygon, siteCollection: Collection) -> list[tuple[Perception, Point, float, Polygon]]:
+    def run(self, site: Polygon, siteCollection: Collection) -> list[tuple[Perception, Point, float, tuple[Polygon, ...]]]:
         polygonQueue: Queue[Polygon] = Queue()
         polygonQueue.put(site)
         # list[tuple[queryPerception, destination, rotation, generatedPolygon]]
-        generation: list[tuple[Perception, Point, float, Polygon]] = list()
+        generation: list[tuple[Perception, Point, float, tuple[Polygon, ...]]] = list()
         while not polygonQueue.empty():
-            print(f"Generating for {polygon}")
             polygon: Polygon = polygonQueue.get()
-            generated: list[tuple[Perception, Point, float, Polygon]]
+            print(f"Generating for {polygon.__repr__()}")
+            print(f"{polygonQueue.qsize()} left in queue")
+            generated: list[tuple[Perception, Point, float, tuple[Polygon, ...]]]
             remainingPolygons: list[Polygon]
             newCollection: Collection
             generated, remainingPolygons, newCollection = self.generate(polygon, siteCollection)
@@ -31,18 +32,19 @@ class Simulator:
             for remainingPolygon in remainingPolygons:
                 if not remainingPolygon.is_empty:
                     polygonQueue.put(remainingPolygon)
+                    print(f"{remainingPolygon.__repr__()} put in queue")
             siteCollection = newCollection
             print("=========================")
         return generation
     
-    def generate(self, polygon: Polygon, siteCollection: Collection) -> tuple[list[tuple[Perception, Point, float, Polygon]], list[Polygon], Collection]:
+    def generate(self, polygon: Polygon, siteCollection: Collection) -> tuple[list[tuple[Perception, Point, float, tuple[Polygon, ...]]], list[Polygon], Collection]:
         generators: list[tuple[Perception, Polygon]] = self.findGenerators(polygon, siteCollection)
         querySamplesAdded: set[Sample] = set()
         newIds: list[str] = list()
         newPoints: list[Point] = list()
         newRegions: list[Polygon] = list()
         newSamples: list[Sample] = list()
-        generated: list[tuple[Perception, Point, float, Polygon]] = list()
+        generated: list[tuple[Perception, Point, float, tuple[Polygon, ...]]] = list()
         leftoverPolygons: list[Polygon] = list()
         generator: tuple[Perception, Polygon]
         for generator in generators:
@@ -54,17 +56,21 @@ class Simulator:
             distance, queryPerception, rotation = self.queryCollection.findSimilar(sitePerception)
             origin: Point = queryPerception.getPoint()
             destination: Point = sitePerception.getPoint()
-            generatedPolygon: Polygon = Geometric.rotate(Geometric.translate(queryPerception.getRegion(), origin, destination), destination, rotation) # type: ignore[assignment]
-            generatedPolygon = intersection(generatedPolygon, generatingPolygon) # type: ignore[assignment]
-            assert(isinstance(generatedPolygon, Polygon))
-            if generatedPolygon.is_empty:
+            transformedQueryPolygon: Polygon = Geometric.rotate(Geometric.translate(queryPerception.getRegion(), origin, destination), destination, rotation) # type: ignore[assignment]
+            generatedPolygon: Geometry = intersection(transformedQueryPolygon, generatingPolygon)
+            generatedPolygons: list[Polygon] = Geometric.geometryToPolygons(generatedPolygon)
+            generatedPolygons = list(filter(lambda p: not p.is_empty, generatedPolygons))
+            if len(generatedPolygons) <= 0:
                 leftoverPolygons.append(generatingPolygon)
                 continue
-            remainingPolygons: list[Polygon] = Geometric.geometryToPolygons(difference(generatingPolygon, generatedPolygon))
+            remainingPolygons: list[Polygon] = Geometric.geometryToPolygons(difference(generatingPolygon, MultiPolygon(generatedPolygons)))
             remainingPolygons = list(filter(lambda p: not p.is_empty, remainingPolygons))
-            clippingPolygon: Polygon = Geometric.translate(Geometric.rotate(generatedPolygon, destination, -rotation), destination, origin) # type: ignore[assignment]
-            samplesInClip: list[Sample] = self.queryCollection.samplesInPolygon(clippingPolygon)
-            samplesInClip = list(filter(lambda s: not s in querySamplesAdded, samplesInClip))
+            clippingPolygon: list[Polygon] = [Geometric.translate(Geometric.rotate(polygon, destination, -rotation), destination, origin) for polygon in generatedPolygons] # type: ignore[misc]
+            sampleSetInClip: set[Sample] = set()
+            for polygon in clippingPolygon:
+                samples: list[Sample] = self.queryCollection.samplesInPolygon(polygon)
+                sampleSetInClip.update(samples)
+            samplesInClip: list[Sample] = list(filter(lambda s: not s in querySamplesAdded, sampleSetInClip))
             querySamplesAdded.update(samplesInClip)
             sampleInClip: Sample
             for sampleInClip in samplesInClip:
@@ -78,8 +84,9 @@ class Simulator:
                 newPoints.append(newPoint)
                 newRegions.append(newRegion)
                 newSamples.append(newSample)
-            generated.append((queryPerception, destination, rotation, generatedPolygon))
+            generated.append((queryPerception, destination, rotation, tuple(generatedPolygons)))
             leftoverPolygons.extend(remainingPolygons)
+        leftoverPolygons = Geometric.geometryToPolygons(union_all(leftoverPolygons))
         newSiteCollection = siteCollection.update(newIds, newPoints, newRegions, newSamples)
         return (generated, leftoverPolygons, newSiteCollection)
     

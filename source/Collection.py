@@ -1,127 +1,84 @@
-from geopandas import GeoDataFrame # type: ignore[import-untyped]
-from pandas import concat, DataFrame, Series
-from shapely import Point, Polygon, STRTree
+from shapely import Point, Polygon
 
-from .Sample import Sample
 from .Perception import Perception
+from .Sample import Sample
 
-import time
-from typing import Hashable, Self, Union
+from time import time
+from typing import Collection as CollectionType, Self, Sequence
 
 class Collection:
-    RADIUS: float = 100
+    def __init__(self, perceptions: CollectionType[Perception]) -> None:
+        self.perceptions: tuple[Perception, ...] = tuple(perceptions)
 
-    def __init__(self, samples: dict[str, Sample],
-                 perceptions: dict[str, Perception]) -> None:
-        self.samples: dict[str, Sample] = samples
-        self.perceptions: dict[str, Perception] = perceptions
+    def __repr__(self) -> str:
+        return f"Collection: {len(self.perceptions)}"
 
     @classmethod
-    def fromPointsRegionsClusters(
-        cls, pointsGdf: GeoDataFrame,
-        regionsGdf: GeoDataFrame, clusters: dict[str, int]
-    ) -> Self:
-        samples: dict[str, Sample] = Collection.initSamples(pointsGdf, clusters)
-        perceptions: dict[str, Perception] =\
-            Collection.initPerceptions(samples, pointsGdf, regionsGdf)
-        return cls(samples, perceptions)
-
-    @staticmethod
-    def initSamples(pointsGdf: GeoDataFrame, clusters: dict[str, int])\
-    -> dict[str, Sample]:
-        samples: dict[str, Sample] = dict()
-        index: str
-        row: Series
-        for index, row in pointsGdf.iterrows():
-            point: Point = row["geometry"]
-            cluster: int = clusters[index]
-            samples[index] = Sample(index, point, cluster)
-        return samples
-
-    @staticmethod
-    def initPerceptions(
-        samples: dict[str, Sample],
-        pointsGdf: GeoDataFrame,
-        regionsGdf: GeoDataFrame
-    ) -> dict[str, Perception]:
-        perceptions: dict[str, Perception] = dict()
-        pointsGdf.sindex
-        id: str
-        sample: Sample
-        for id, sample in samples.items():
-            region: Polygon = regionsGdf.iloc[id]
-            sampleList: list[Sample] = [
-                samples[i] for i in pointsGdf.iloc[
-                    pointsGdf.sindex.query(region, predicate="intersects")
-                ].index
-            ]
-            perceptions[id] = Perception(sample, region, sampleList)
-        return perceptions
-    
-    # can be optimised, now it recreates all samples and perceptions regardless of if they are modified
-    def update(self, generated: list[tuple[Perception, Perception, float, Polygon]], queryCollection: Self) -> Self:
-        newSamples: dict[str, Sample] = self.samples.copy()
-        newRegions: dict[str, Polygon] = {id: polygon for id, polygon in self.perceptions.items()}
-        generation: tuple[Perception, Perception, float, Polygon]
-        for generation in generated:
-            origin: Point = generation[0].getPoint()
-            destination: Point = generation[1].getPoint()
-            translation: tuple[float, float] = (destination.x - origin.x, destination.y - origin.y)
-            rotation: float = generation[2]
-            rotTransSamples: list[Sample] = [sample
-                                            .translate(translation)
-                                            .rotate((destination.x, destination.y), rotation)\
-                                        for sample in generation[0].getSamples()]
-            rotTransSamplePoints: list[Point] = [sample.getPoint for sample in rotTransSamples]
-            strTree: STRTree = STRTree(rotTransSamplePoints)
-            query: list[int] = list(strTree.query(generation[3], predicate="intersects"))
-            filteredSamples: list[Sample] = list()
-            i: int
-            for i in query:
-                filteredSamples.append(rotTransSamples[i])
-            filteredRegions: list[Polygon] = list()
-            for sample in filteredSamples:
-                region: Polygon = queryCollection.getPerception(sample.getId()).getRegion()
-                region = Collection.translate(region).rotate(region)
-                filteredRegions.append(region)
-            for sample in filteredSamples:
-    
-    def getPerceptions(self) -> dict[str, Perception]:
-        return self.perceptions
-
-    def perceptionsWithin(self, polygon: Polygon) -> dict[str, Perception]:
-        id: str
-        perception: Perception
-        return {id: perception for id, perception in self.perceptions.items()
-                if perception.within(polygon)}
-    
-    def getPerception(self, perceptionId: str) -> Perception:
-        return self.perceptions[perceptionId]
-    
-    def findSimilar(self, query: Perception, limit: int = 1) -> Union[tuple[Perception, float], list[tuple[Perception, float]]]:
-        start = time.time()
-        perceptionDistances: dict[str, tuple[float, float]] =\
-            {id: Collection.calculateDistance(perception, query) for id, perception in self.perceptions.items()}
-        end = time.time()
-        print(f"{query} query took {end - start} seconds")
-        # perceptionDistances: dict[str, tuple[float, float]] =\
-        #     {id: (0, 0) for id, perception in self.perceptions.items()} # ARBITRARY RETURN FOR FAST TESTING
-        perceptionDf: DataFrame = DataFrame.from_dict(perceptionDistances, orient="index", columns=["distance", "rotation"]).sort_values("distance", axis=0).head(limit)
-        similar: list[tuple[Perception, float]] = list()
-        i: int = 0
-        index: Hashable
-        row: Series
-        for index, row in perceptionDf.iterrows():
-            assert(isinstance(index, str))
-            if i >= limit:
-                break
-            similar.append((self.perceptions[index], row["rotation"]))
-        if limit == 1:
-            return similar[0]
-        return similar
+    def fromIdsPointsRegionsSamples(cls, ids: Sequence[str], points: Sequence[Point], regions: Sequence[Polygon], samples: CollectionType[Sample]) -> Self:
+        if len(ids) != len(points) or len(ids) != len(regions):
+            raise ValueError("Number of ids, points, and regions must match!")
+        perceptions: list[Perception] = list()
+        i: int
+        for i in range(len(ids)):
+            perceptions.append(Perception(ids[i], points[i], regions[i], samples))
+        return cls(perceptions)
     
     @staticmethod
     def calculateDistance(p1: Perception, p2: Perception) -> tuple[float, float]:
-        rotation: float = Perception.rotation(p1, p2)
-        distance: float = Perception.distance(p1, p2, rotation)
-        return (distance, rotation)
+        rotation: float = p1.rotationTo(p2)
+        distance: float = p1.distanceTo(p2, rotation)
+        return (rotation, distance)
+    
+    def findSimilar(self, query: Perception) -> tuple[float, Perception, float]:
+        return self.findSimilarAll(query)[0]
+
+    def findSimilarAll(self, query: Perception) -> tuple[tuple[float, Perception, float], ...]:
+        print(f"Querying {self.__repr__()} with {query}")
+        start = time()
+        perceptionDistances: list[tuple[float, Perception, float]] = list()
+        perception: Perception
+        for perception in self.perceptions:
+            rotation: float
+            distance: float
+            rotation, distance = Collection.calculateDistance(perception, query)
+            perceptionDistances.append((distance, perception, rotation))
+        perceptionDistances.sort()
+        end = time()
+        print(f"Query took {end - start} s")
+        return tuple(perceptionDistances)
+    
+    def update(self, newIds: Sequence[str], newPoints: Sequence[Point], newRegions: Sequence[Polygon], newSamples: CollectionType[Sample]) -> Self:
+        ids: list[str] = [perception.getId() for perception in self.perceptions]
+        points: list[Point] = [perception.getPoint() for perception in self.perceptions]
+        regions: list[Polygon] = [perception.getRegion() for perception in self.perceptions]
+        samples: set[Sample] = set(self.getSamples())
+        ids.extend(newIds)
+        points.extend(newPoints)
+        regions.extend(newRegions)
+        samples.update(newSamples)
+        return Collection.fromIdsPointsRegionsSamples(ids, points, regions, samples) # type: ignore[return-value]
+    
+    def getSamples(self) -> list[Sample]:
+        sampleSet: set[Sample] = set()
+        perception: Perception
+        for perception in self.perceptions:
+            sampleSet.update(perception.getSamples())
+        return list(sampleSet)
+    
+    def samplesInPolygon(self, polygon: Polygon) -> list[Sample]:
+        sampleSet: set[Sample] = set()
+        perception: Perception
+        for perception in self.perceptions:
+            sampleSet.update(perception.samplesInPolygon(polygon))
+        return list(sampleSet)
+    
+    def perceptionFromSample(self, sample: Sample) -> Perception:
+        matchingPerceptions: list[Perception] = list(filter((lambda p: Sample(p.getPoint(), p.getCluster()) == sample), self.perceptions))
+        if len(matchingPerceptions) <= 0:
+            raise IndexError(f"No perception in {self.__repr__()} found from {sample.__repr__()}!")
+        perceptionDistances: list[tuple[float, Perception]] = [(perception.getPoint().distance(sample.getPoint()), perception) for perception in matchingPerceptions]
+        perceptionDistances.sort()
+        return perceptionDistances[0][1]
+    
+    def getPerceptions(self) -> list[Perception]:
+        return list(self.perceptions)

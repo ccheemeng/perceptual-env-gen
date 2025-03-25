@@ -1,8 +1,9 @@
 from shapely import Geometry, GeometryCollection, LineString, LinearRing,\
-    MultiLineString, MultiPoint, MultiPolygon, Point, Polygon
+    MultiLineString, MultiPoint, MultiPolygon, Point, Polygon, voronoi_polygons
 
 from collections.abc import Sequence
 from math import cos, sin
+from typing import Optional
 
 class Geometric:
     @staticmethod
@@ -18,6 +19,21 @@ class Geometric:
             return newPolygons
         return list()
     
+    @staticmethod
+    def voronoiPolygons(points: list[Point], extendTo: Optional[Geometry] = None) -> list[Polygon]:
+        polygons: list[Polygon] = Geometric.geometryToPolygons(voronoi_polygons(MultiPoint(points), extend_to=extendTo))
+        sortedPolygons: list[Polygon] = list()
+        point: Point
+        for point in points:
+            polygon: Polygon
+            for polygon in polygons:
+                if point.within(polygon):
+                    polygons.remove(polygon)
+                    sortedPolygons.append(polygon)
+                    break
+        assert len(sortedPolygons) == len(points), f"Could not find voronoi for {points.__repr__()}!"
+        return sortedPolygons
+
     @staticmethod
     def translate(geometry: object, originOrVector: object, destination: object = None) -> object:
         if destination == None:

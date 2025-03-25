@@ -9,10 +9,12 @@ from queue import Queue
 
 class Simulator:
     MAX_GEN_DIST: float = 40
+    MIN_POLYGON_AREA: float = 5
 
-    def __init__(self, queryCollection: Collection, max_gen_dist: float = MAX_GEN_DIST):
+    def __init__(self, queryCollection: Collection, max_gen_dist: float = MAX_GEN_DIST, min_polygon_area: float = MIN_POLYGON_AREA):
         self.queryCollection: Collection = queryCollection
         self.max_gen_dist: float = max_gen_dist
+        self.min_polygon_area: float = min_polygon_area
 
     def run(self, site: Polygon, siteCollection: Collection) -> list[tuple[Perception, Point, float, tuple[Polygon, ...]]]:
         polygonQueue: Queue[Polygon] = Queue()
@@ -23,6 +25,10 @@ class Simulator:
             polygon: Polygon = polygonQueue.get()
             print(f"Generating for {polygon.__repr__()}")
             print(f"{polygonQueue.qsize()} left in queue")
+            print(f"Site: {siteCollection}")
+            if polygon.area < self.min_polygon_area:
+                print(f"Skipping {polygon.__repr__()}: smaller than 5 m2")
+                continue
             generated: list[tuple[Perception, Point, float, tuple[Polygon, ...]]]
             remainingPolygons: list[Polygon]
             newCollection: Collection
@@ -30,10 +36,11 @@ class Simulator:
             generation.extend(generated)
             remainingPolygon: Polygon
             for remainingPolygon in remainingPolygons:
-                if not remainingPolygon.is_empty:
+                if not (remainingPolygon.is_empty or remainingPolygon.equals(polygon)):
                     polygonQueue.put(remainingPolygon)
                     print(f"{remainingPolygon.__repr__()} put in queue")
             siteCollection = newCollection
+            print(f"Site: {siteCollection}")
             print("=========================")
         return generation
     
@@ -54,6 +61,7 @@ class Simulator:
             queryPerception: Perception
             rotation: float
             distance, queryPerception, rotation = self.queryCollection.findSimilar(sitePerception)
+            # queryPerception, rotation = (self.queryCollection.getPerceptions()[0], 0)
             origin: Point = queryPerception.getPoint()
             destination: Point = sitePerception.getPoint()
             transformedQueryPolygon: Polygon = Geometric.rotate(Geometric.translate(queryPerception.getRegion(), origin, destination), destination, rotation) # type: ignore[assignment]
@@ -65,9 +73,9 @@ class Simulator:
                 continue
             remainingPolygons: list[Polygon] = Geometric.geometryToPolygons(difference(generatingPolygon, MultiPolygon(generatedPolygons)))
             remainingPolygons = list(filter(lambda p: not p.is_empty, remainingPolygons))
-            clippingPolygon: list[Polygon] = [Geometric.translate(Geometric.rotate(polygon, destination, -rotation), destination, origin) for polygon in generatedPolygons] # type: ignore[misc]
+            clippingPolygons: list[Polygon] = [Geometric.translate(Geometric.rotate(polygon, destination, -rotation), destination, origin) for polygon in generatedPolygons] # type: ignore[misc]
             sampleSetInClip: set[Sample] = set()
-            for polygon in clippingPolygon:
+            for polygon in clippingPolygons:
                 samples: list[Sample] = self.queryCollection.samplesInPolygon(polygon)
                 sampleSetInClip.update(samples)
             samplesInClip: list[Sample] = list(filter(lambda s: not s in querySamplesAdded, sampleSetInClip))
@@ -100,8 +108,9 @@ class Simulator:
             distanceToPolygon: float = perceptionPoint.distance(polygon)
             if distanceToPolygon <= self.max_gen_dist:
                 perceptionPoints.append((sitePerception, perceptionPoint))
-        voronoiPolygons: list[Polygon] = Geometric.geometryToPolygons(voronoi_polygons(MultiPoint([dpp[1] for dpp in perceptionPoints]), extend_to=polygon))
-        assert len(voronoiPolygons) == len(perceptionPoints), "No 1:1 mapping between site points and site voronoi polygons!"
+        if len(perceptionPoints) <= 1:
+            return [(perceptionPoint[0], polygon) for perceptionPoint in perceptionPoints]
+        voronoiPolygons: list[Polygon] = Geometric.voronoiPolygons([perceptionPoint[1] for perceptionPoint in perceptionPoints], extendTo=polygon)
         i: int
         for i in range(len(perceptionPoints)):
             perception: Perception = perceptionPoints[i][0]

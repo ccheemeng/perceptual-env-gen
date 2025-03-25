@@ -32,10 +32,10 @@ class IO:
         row: Series
         for id, row in pointsGdf.iterrows():
             if not id in regionsGdf.index:
-                print(f"{id} in {points_geojson} not in {regions_geojson}!")
+                print(f"{id} not in {regions_geojson}!")
                 continue
             if not id in clusterDf.index:
-                print(f"{id} in {points_geojson} not in {cluster_csv}!")
+                print(f"{id} not in {cluster_csv}!")
                 continue
             point: Point = row["geometry"]
             assert isinstance(point, Point)
@@ -70,18 +70,19 @@ class IO:
     def write(dir: str, siteId: str, generation: list[tuple[Perception, Point, float, tuple[Polygon, ...]]]) -> None:
         outputDir: str = join("runs", dir)
         Path(outputDir).mkdir(parents=True, exist_ok=True)
-        rows: list[tuple[str, float, float, float, float, float, float, float]] = [
-            (g[0].getId(), g[0].getPoint().x, g[0].getPoint().y, g[1].x, g[1].y,
-            g[1].x - g[0].getPoint().x, g[1].y - g[0].getPoint().y, g[2])
-            for g in generation
+        rows: list[tuple[int, str, float, float, float, float, float, float, float]] = [
+            (i, generation[i][0].getId(), generation[i][0].getPoint().x, generation[i][0].getPoint().y,
+            generation[i][1].x, generation[i][1].y,
+            generation[i][1].x - generation[i][0].getPoint().x,
+            generation[i][1].y - generation[i][0].getPoint().y, generation[i][2])
+            for i in range(len(generation))
         ]
-        perceptionId: list[str] = [row[0] for row in rows]
+        id: list[int] = [row[0] for row in rows]
         multiPolygons: list[MultiPolygon] = [MultiPolygon(g[3]) for g in generation]
-        polygonsGdf: GeoDataFrame = GeoDataFrame(geometry=multiPolygons, index=perceptionId)
-        print(polygonsGdf)
+        polygonsGdf: GeoDataFrame = GeoDataFrame(geometry=multiPolygons, index=id)
         with open(join(outputDir, f"{siteId}.csv"), 'w') as fp:
             csvwriter = writer(fp)
-            csvwriter.writerow(("id", "originX", "originY", "destinationX", "destinationY", "translationX", "translationY", "rotationCCW"))
+            csvwriter.writerow(("id", "perceptionId", "originX", "originY", "destinationX", "destinationY", "translationX", "translationY", "rotationCCW"))
             csvwriter.writerows(rows)
         with open(join(outputDir, f"{siteId}.geojson"), 'w') as fp:
             dump(polygonsGdf.to_geo_dict(), fp)

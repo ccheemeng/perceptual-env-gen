@@ -19,13 +19,12 @@ class Collection:
 
     @classmethod
     def fromIdsPointsRegionsSamples(cls, ids: Sequence[str], points: Sequence[Point], regions: Sequence[Polygon], samples: CollectionType[Sample]) -> Self:
+        print("Initialising collection...")
         if len(ids) != len(points) or len(ids) != len(regions):
             raise ValueError("Number of ids, points, and regions must match!")
         perceptions: list[Perception] = list()
         i: int
         for i in range(len(ids)):
-            if i % 100 == 0:
-                print(i)
             perceptions.append(Perception(ids[i], points[i], regions[i], samples))
         return cls(perceptions)
     
@@ -36,11 +35,30 @@ class Collection:
         return (rotation, distance)
     
     def findSimilar(self, query: Perception) -> tuple[float, Perception, float]:
-        return self.findSimilarAll(query)[0]
-
-    def findSimilarAll(self, query: Perception) -> tuple[tuple[float, Perception, float], ...]:
         print(f"Querying {self.__repr__()} with {query}")
         start = time()
+        similar: tuple[float, Perception, float] = self.findSimilarFast(query)[0]
+        end = time()
+        print(f"Query took {end - start} s")
+        return similar
+
+    def findSimilarFast(self, query: Perception) -> tuple[tuple[float, Perception, float], ...]:
+        perceptionDistances: list[tuple[float, Perception, float]] = list()
+        perception: Perception
+        for perception in self.perceptions:
+            if query.getCluster() != perception.getCluster():
+                continue
+            rotation: float
+            distance: float
+            rotation, distance = Collection.calculateDistance(perception, query)
+            print(f"{perception}: {distance}")
+            perceptionDistances.append((distance, perception, rotation))
+        if len(perceptionDistances) <= 0:
+            return self.findSimilarAll(query)
+        perceptionDistances.sort(key=lambda x: x[0])
+        return tuple(perceptionDistances)
+
+    def findSimilarAll(self, query: Perception) -> tuple[tuple[float, Perception, float], ...]:
         perceptionDistances: list[tuple[float, Perception, float]] = list()
         perception: Perception
         for perception in self.perceptions:
@@ -49,8 +67,6 @@ class Collection:
             rotation, distance = Collection.calculateDistance(perception, query)
             perceptionDistances.append((distance, perception, rotation))
         perceptionDistances.sort(key=lambda x: x[0])
-        end = time()
-        print(f"Query took {end - start} s")
         return tuple(perceptionDistances)
 
     def filter(self, sitePolygons: list[Polygon]) -> Self:

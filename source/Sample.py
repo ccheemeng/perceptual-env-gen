@@ -1,27 +1,41 @@
 from shapely import Point, Polygon
 
+from .Geometric import Geometric
+
+from math import cos, sin
+from typing import Self
+
 class Sample:
-    def __init__(self, id: str, point: Point,
-                 radius: float, cluster: int) -> None:
-        self.id: str = id
+    def __init__(self, point: Point, cluster: int) -> None:
         self.point: Point = point
-        self.radius: float = radius
         self.cluster: int = cluster
 
     def __repr__(self) -> str:
-        return (
-            f"{self.id}: cluster {self.cluster} "
-            f"@ {self.point.__repr__()} of r={self.radius}"
-        )
+        return (f"Cluster {self.cluster} @ {self.point.__repr__()}")
     
-    def getId(self) -> str:
-        return self.id
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Sample):
+            return self.point.equals(other.point) and self.cluster == other.cluster
+        return False
+    
+    def __hash__(self):
+        return hash(self.__repr__())
+    
+    def translate(self, originOrVector: object, destination: object = None) -> Self:
+        newPoint: object = Geometric.translate(self.point, originOrVector, destination)
+        assert isinstance(newPoint, Point)
+        return Sample(newPoint, self.cluster) # type: ignore[return-value]
+    
+    def rotate(self, origin: object, rotation: float) -> Self:
+        newPoint: object = Geometric.rotate(self.point, origin, rotation)
+        assert isinstance(newPoint, Point)
+        return Sample(newPoint, self.cluster) # type: ignore[return-value]
+    
+    def within(self, polygon: Polygon) -> bool:
+        return self.point.within(polygon)
 
     def getPoint(self) -> Point:
         return self.point
 
     def getCluster(self) -> int:
         return self.cluster
-    
-    def within(self, polygon: Polygon) -> bool:
-        return self.point.within(polygon)

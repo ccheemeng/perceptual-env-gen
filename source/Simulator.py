@@ -1,110 +1,127 @@
-from geopandas import GeoDataFrame # type: ignore[import-untyped]
-from pandas import DataFrame
-from pyproj import CRS
-from shapely import Geometry, GeometryCollection, MultiPoint, MultiPolygon, Point, Polygon,\
-    difference, intersection, voronoi_polygons
+from geopandas import GeoDataFrame
+from shapely import Geometry, MultiPoint, MultiPolygon, Point, Polygon, difference, intersection, union_all, voronoi_polygons
 
-from .Perception import Perception
 from .Collection import Collection
+from .Geometric import Geometric
+from .Perception import Perception
+from .Sample import Sample
 
-from math import ceil
 from queue import Queue
-from typing import Union
+import random
+import math
 
 class Simulator:
-    SG_CRS: CRS = CRS.from_user_input(3414)
-    MAX_GEN_DIST: float = 100
-    MEAN_POLYGON_AREA: float = 500
+    MAX_GEN_DIST: float = 40
+    MIN_POLYGON_AREA: float = 5
 
-    def __init__(self, queryCollection: Collection, siteCollection: Collection,
-                 crs: CRS = SG_CRS, max_gen_dist: float = MAX_GEN_DIST,
-                 mean_polygon_area: float = MEAN_POLYGON_AREA):
+    def __init__(self, queryCollection: Collection, max_gen_dist: float = MAX_GEN_DIST, min_polygon_area: float = MIN_POLYGON_AREA):
         self.queryCollection: Collection = queryCollection
-        self.siteCollection: Collection = siteCollection
-        self.crs: CRS = crs
-        self.max_gen_dist = max_gen_dist
-        self.mean_polygon_area = mean_polygon_area
+        self.max_gen_dist: float = max_gen_dist
+        self.min_polygon_area: float = min_polygon_area
 
-    def run(self, site: Polygon) -> list[tuple[Point, Point, float, Polygon]]:
+    def run(self, site: Polygon, siteCollection: Collection) -> list[tuple[Perception, Point, float, tuple[Polygon, ...]]]:
         polygonQueue: Queue[Polygon] = Queue()
         polygonQueue.put(site)
-        # list[tuple[sampleId, sitePolygon, translationXY, ccwRotation]]
-        generation: list[tuple[Point, Point, float, Polygon]] = list()
+        # list[tuple[queryPerception, destination, rotation, generatedPolygon]]
+        generation: list[tuple[Perception, Point, float, tuple[Polygon, ...]]] = list()
         while not polygonQueue.empty():
+            print("=========================")
             polygon: Polygon = polygonQueue.get()
-            generated: list[tuple[Point, Point, float, Polygon]]
+            print(f"Generating for {polygon.__repr__()}")
+            print(f"{polygonQueue.qsize()} left in queue")
+            print(f"Site: {siteCollection}")
+            if polygon.area < self.min_polygon_area:
+                print(f"Skipping {polygon.__repr__()}: smaller than 5 m2")
+                continue
+            generated: list[tuple[Perception, Point, float, tuple[Polygon, ...]]]
             remainingPolygons: list[Polygon]
-            generated, remainingPolygons = self.generate(polygon)
+            newCollection: Collection
+            generated, remainingPolygons, newCollection = self.generate(polygon, siteCollection)
             generation.extend(generated)
             remainingPolygon: Polygon
             for remainingPolygon in remainingPolygons:
-                polygonQueue.put(remainingPolygon)
-            print("===========================================")
+                if not (remainingPolygon.is_empty or remainingPolygon.equals(polygon)):
+                    polygonQueue.put(remainingPolygon)
+                    print(f"{remainingPolygon.__repr__()} put in queue")
+            siteCollection = newCollection
+            print(f"Site: {siteCollection}")
         return generation
-
-    def generate(self, polygon: Polygon) ->\
-        tuple[list[tuple[Point, Point, float, Polygon]], list[Polygon]]:
-        generators: list[tuple[str, Polygon]] = self.findGenerators(polygon)
-        generated: list[tuple[Point, Point, float, Polygon]] = list()
+    
+    def generate(self, polygon: Polygon, siteCollection: Collection) -> tuple[list[tuple[Perception, Point, float, tuple[Polygon, ...]]], list[Polygon], Collection]:
+        generators: list[tuple[Perception, Polygon]] = self.findGenerators(polygon, siteCollection)
+        querySamplesAdded: set[Sample] = set()
+        newIds: list[str] = list()
+        newPoints: list[Point] = list()
+        newRegions: list[Polygon] = list()
+        newSamples: list[Sample] = list()
+        generated: list[tuple[Perception, Point, float, tuple[Polygon, ...]]] = list()
         leftoverPolygons: list[Polygon] = list()
-        generator: tuple[str, Polygon]
+        generator: tuple[Perception, Polygon]
         for generator in generators:
-            perceptionId: str = generator[0]
+            sitePerception: Perception = generator[0]
             generatingPolygon: Polygon = generator[1]
-            sitePerception: Perception = self.siteCollection.getPerception(perceptionId)
-            generatedPolygon: Geometry = intersection(
-                sitePerception.perceptionZone(), generatingPolygon) # guaranteed Polygon
-            assert(isinstance(generatedPolygon, Polygon))
-            if generatedPolygon.is_empty:
-                # assigned generating Perception is out of range
-                # add to leftovers for next iter of finding
+            distance: float
+            queryPerception: Perception
+            rotation: float
+            # distance, queryPerception, rotation = self.queryCollection.findSimilar(sitePerception)
+            queryPerception, rotation = (random.choice(self.queryCollection.getPerceptions()), random.random() * 2 * math.pi)
+            origin: Point = queryPerception.getPoint()
+            destination: Point = sitePerception.getPoint()
+            transformedQueryPolygon: Polygon = Geometric.rotateAboutShapely(Geometric.translateOD(queryPerception.getRegion(), origin, destination), destination, rotation) # type: ignore[assignment]
+            generatedPolygon: Geometry = intersection(transformedQueryPolygon, generatingPolygon)
+            generatedPolygons: list[Polygon] = Geometric.geometryToPolygons(generatedPolygon)
+            generatedPolygons = list(filter(lambda p: not p.is_empty, generatedPolygons))
+            if len(generatedPolygons) <= 0:
                 leftoverPolygons.append(generatingPolygon)
                 continue
-            print(f"querying for {generator}")
-            similarPerception: Perception
-            rotation: float
-            similarPerception, rotation = self.queryCollection.findSimilar(sitePerception) # type: ignore[assignment]
-
-            remainingPolygons: list[Polygon] = Simulator.geometryToPolygons(difference(generatingPolygon, sitePerception.perceptionZone()))
+            remainingPolygons: list[Polygon] = Geometric.geometryToPolygons(difference(generatingPolygon, MultiPolygon(generatedPolygons)))
             remainingPolygons = list(filter(lambda p: not p.is_empty, remainingPolygons))
+            clippingPolygons: list[Polygon] = [Geometric.translateOD(Geometric.rotateAboutShapely(polygon, destination, -rotation), destination, origin) for polygon in generatedPolygons] # type: ignore[misc]
+            sampleSetInClip: set[Sample] = set()
+            for polygon in clippingPolygons:
+                samples: list[Sample] = self.queryCollection.samplesInPolygon(polygon)
+                sampleSetInClip.update(samples)
+            samplesInClip: list[Sample] = list(filter(lambda s: not s in querySamplesAdded, sampleSetInClip))
+            querySamplesAdded.update(samplesInClip)
+            sampleInClip: Sample
+            for sampleInClip in samplesInClip:
+                associatedPerception: Perception = self.queryCollection.perceptionFromSample(sampleInClip)
+                newSample = sampleInClip.translate(origin, destination).rotate(destination, rotation)
+                newId: str = associatedPerception.getId()
+                newPoint: Point = newSample.getPoint()
+                newRegion: Polygon = associatedPerception.getRegion()
+                newRegion = Geometric.rotateAboutShapely(Geometric.translateOD(newRegion, origin, destination), destination, rotation) # type: ignore[assignment]
+                newIds.append(newId)
+                newPoints.append(newPoint)
+                newRegions.append(newRegion)
+                newSamples.append(newSample)
+            generated.append((queryPerception, destination, rotation, tuple(generatedPolygons)))
             leftoverPolygons.extend(remainingPolygons)
-            generated.append((similarPerception.getPoint(), sitePerception.getPoint(), rotation, generatedPolygon))
-        return (generated, leftoverPolygons)
-
-    def findGenerators(self, polygon: Polygon) -> list[tuple[str, Polygon]]:
-        points: dict[str, Point] = {id: perception.getPoint()\
-                                    for id, perception in self.siteCollection.getPerceptions().items()}
-        pointsGdf: GeoDataFrame = GeoDataFrame(DataFrame\
-                .from_dict(points, orient="index", columns=["geometry"]), crs=self.crs)
-        pointsGdf["distanceToPolygon"] = pointsGdf.apply(lambda row: row["geometry"].distance(polygon.centroid), axis=1)
-        numPoints = ceil(polygon.area / self.mean_polygon_area)
-        pointsGdf = pointsGdf.loc[pointsGdf["distanceToPolygon"] <= self.max_gen_dist].sort_values("distanceToPolygon", axis=0).head(numPoints)
-        voronoiPolygons: list[Polygon] = Simulator.geometryToPolygons(voronoi_polygons(MultiPoint(list(pointsGdf.geometry)), extend_to=polygon))
-        ids: list[str] = list(pointsGdf.index)
-        assert len(voronoiPolygons) == len(ids),\
-            "No 1:1 mapping between site points and site polygons!"
-        generators: list[tuple[str, Polygon]] = list()
-        for i in range(len(ids)):
-            id: str = ids[i]
+        leftoverPolygons = Geometric.geometryToPolygons(union_all(leftoverPolygons))
+        newSiteCollection = siteCollection.update(newIds, newPoints, newRegions, newSamples)
+        return (generated, leftoverPolygons, newSiteCollection)
+    
+    def findGenerators(self, polygon: Polygon, siteCollection: Collection) -> list[tuple[Perception, Polygon]]:
+        generators: list[tuple[Perception, Polygon]] = list()
+        sitePerceptions: list[Perception] = siteCollection.getPerceptions()
+        perceptionsGdf: GeoDataFrame = GeoDataFrame(data={"perception": sitePerceptions}, geometry=[perception.getPoint() for perception in sitePerceptions])
+        perceptionsGdf["distToPolygon"] = perceptionsGdf["geometry"].distance(polygon)
+        perceptionsGdf = perceptionsGdf.drop(perceptionsGdf.loc[perceptionsGdf["distToPolygon"] > self.max_gen_dist].index)
+        perceptionsGdf = perceptionsGdf.drop_duplicates(subset="geometry")
+        perceptionPoints: list[tuple[Perception, Point]] = list()
+        for index, row in perceptionsGdf.iterrows():
+            perceptionPoints.append((row["perception"], row["geometry"]))
+        if len(perceptionPoints) <= 1:
+            return [(perceptionPoint[0], polygon) for perceptionPoint in perceptionPoints]
+        voronoiPolygons: list[Polygon] = Geometric.voronoiPolygons([perceptionPoint[1] for perceptionPoint in perceptionPoints], extendTo=polygon)
+        i: int
+        for i in range(len(perceptionPoints)):
+            perception: Perception = perceptionPoints[i][0]
             voronoiPolygon: Polygon = voronoiPolygons[i]
-            sitePolygons: list[Polygon] = Simulator.geometryToPolygons(intersection(voronoiPolygon, polygon))
+            sitePolygons: list[Polygon] = Geometric.geometryToPolygons(intersection(voronoiPolygon, polygon))
             sitePolygon: Polygon
             for sitePolygon in sitePolygons:
                 if sitePolygon.is_empty:
                     continue
-                generators.append((id, sitePolygon))
+                generators.append((perception, sitePolygon))
         return generators
-
-    # to delegate to geometry helper class
-    @staticmethod
-    def geometryToPolygons(geometry: Geometry) -> list[Polygon]:
-        if isinstance(geometry, Polygon):
-            return [geometry]
-        if isinstance(geometry, MultiPolygon):
-            return list(geometry.geoms)
-        if isinstance(geometry, GeometryCollection):
-            newPolygons: list[Polygon] = list()
-            for geom in geometry.geoms:
-                newPolygons.extend(Simulator.geometryToPolygons(geom))
-            return newPolygons
-        return list()

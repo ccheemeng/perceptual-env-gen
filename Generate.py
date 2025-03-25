@@ -1,110 +1,76 @@
-from geojson import Feature, FeatureCollection, Point, Polygon
-from geopandas import GeoDataFrame, GeoSeries, clip
-from shapely import Point as ShapelyPoint, Polygon as ShapelyPolygon
+from geopandas import GeoDataFrame, GeoSeries, read_file
+from pandas import DataFrame, read_csv
+from shapely import MultiPolygon, Point
+
+from source import Geometric, IO
 
 from argparse import ArgumentParser, Namespace
-import csv
-from json import load
-from math import sin, cos
-from os import walk
+from csv import reader, writer
 from os.path import join
-from typing import Optional
 
-def main(args: Namespace):
-    points: list[ShapelyPoint] = list()
-    fps: list[str] = list()
-    for root, dir, files in walk(args.dir):
-        for file in files:
-            points.append(ShapelyPoint([float(x) for x in '.'.join(file.split('.')[:-1]).split('_')[:2]]))
-        fps.extend(files)
-        break
-    fileGdf: GeoDataFrame = GeoDataFrame(data={"fp": fps}, geometry=points)
-    fileGdf.sindex
-
-    simulations = []
-    with open(args.fp, 'r') as fp:
-        simulations = load(fp)
-    simulationFeatureCollection: FeatureCollection
-    for simulationFeatureCollection in simulations:
-        originPoint: Point = getFeatureType(simulationFeatureCollection, "origin")["geometry"]
-        destinationPoint: Point = getFeatureType(simulationFeatureCollection, "destination")["geometry"]
-        rotation: float = getFeatureType(simulationFeatureCollection, "origin")["properties"]["rotation"]
-        maskPolygon: Polygon = getFeatureType(simulationFeatureCollection, "mask")["geometry"]
-        originShapelyPoint: ShapelyPoint = ShapelyPoint(originPoint["coordinates"])
-        destinationShapelyPoint: ShapelyPoint = ShapelyPoint(destinationPoint["coordinates"])
-        exterior = maskPolygon["coordinates"][0]
-        interiors = []
-        for ring in maskPolygon["coordinates"][1:]:
-            interiors.append(ring)
-        maskShapelyPolygon: ShapelyPolygon = ShapelyPolygon(shell=exterior, holes=interiors)
-        pcFp: str = fileGdf.iloc[fileGdf.sindex.nearest(originShapelyPoint, return_all=False, max_distance=100)[1]]["fp"].values[0]
-        points = list()
-        labels: list[int] = list()
-        # with open(join(args.dir, pcFp), 'r') as fp:
-        #     reader = csv.reader(fp)
-        #     for row in reader:
-        #         points.append(transform(ShapelyPoint((row[0], row[1], row[2])),
-        #                                 originShapelyPoint, destinationShapelyPoint, rotation))
-        #         labels.append(row[3])
-        # stopgap
-        with open(join(args.dir, pcFp), 'r') as fp:
-            reader = csv.reader(fp)
-            for row in reader:
-                points.append((row[0], row[1], row[2]))
-                labels.append(row[3])
-        destx = sum([float(p[0]) for p in points]) / len(points)
-        desty = sum([float(p[1]) for p in points]) / len(points)
-        originShapelyPoint = ShapelyPoint((destx, desty, 0))
-        points = [transform(ShapelyPoint((float(p[0]), float(p[1]), float(p[2]))), originShapelyPoint, destinationShapelyPoint, rotation) for p in points]
-        pcGdf: GeoDataFrame = GeoDataFrame(data={"label": labels}, geometry=points, crs=3414)
-        mask: GeoSeries = GeoSeries(maskShapelyPolygon, crs=3414)
-        pcGdf.to_file(f"{pcFp}_pc.geojson")
-        GeoSeries(destinationShapelyPoint, crs=3414).to_file(f"{pcFp}_dest.geojson")
-        mask.to_file(f"{pcFp}_mask.geojson")
-        print(originPoint, destinationPoint)
-        print(mask)
-        pcGdf = clip(pcGdf, mask, keep_geom_type=True)
-        print(pcGdf)
-        rows = []
-        for index, row in pcGdf.iterrows():
-            rows.append([row["geometry"].x, row["geometry"].y, row["geometry"].z, row["label"]])
-        print(f"writing {pcFp}")
-        with open(args.out, 'a') as fp:
-            writer = csv.writer(fp)
-            writer.writerows(rows)
-
-def getFeatureType(featureCollection: FeatureCollection, type: str) -> Optional[Feature]:
-    feature: Feature
-    for feature in featureCollection["features"]:
-        if type == feature["properties"]["type"]:
-            return feature
-    return None
-
-# applies translation then rotates about destination point
-def transform(point: ShapelyPoint, origin: ShapelyPoint, destination: ShapelyPoint, rotation: float) -> ShapelyPoint:
-    dx: float = destination.x - origin.x
-    dy: float = destination.y - origin.y
-    x0: float = point.x + dx - destination.x
-    y0: float = point.y + dy - destination.y
-    xrot: float = x0 * cos(rotation) - y0 * sin(rotation)
-    yrot: float = y0 * cos(rotation) + x0 * sin(rotation)
-    x: float = xrot + destination.x
-    y: float = yrot + destination.y
-    return ShapelyPoint((x, y, point.z))
+def main(args: Namespace) -> None:
+    runs: list[str] = IO.collectRuns(args.gen_dir)
+    run: str
+    for run in runs:
+        transformationDf: DataFrame
+        with open(join(args.gen_dir, f"{run}.csv"), 'r') as fp:
+            transformationDf = read_csv(fp, header=0, index_col=0).rename(index=(lambda i: str(i)))
+        multiPolygonGdf: GeoDataFrame
+        with open(join(args.gen_dir, f"{run}.geojson"), 'r') as fp:
+            multiPolygonGdf = read_file(fp)
+            multiPolygonGdf = multiPolygonGdf.set_index("id", drop=True).rename(index=(lambda i: str(i)))
+        index: str
+        multiPolygon: GeoSeries
+        for index, multiPolygon in multiPolygonGdf.iterrows():
+            perceptionId: str = transformationDf.loc[index]["perceptionId"]
+            translation: tuple[float, float] = tuple(transformationDf.loc[index][["translationX", "translationY"]])
+            destination: tuple[float, float] = tuple(transformationDf.loc[index][["destinationX", "destinationY"]])
+            rotation: float = transformationDf.loc[index]["rotationCCW"]
+            multiPolygon: MultiPolygon = multiPolygon["geometry"]
+            points: list[Point] = list()
+            labels: list[Point] = list()
+            with open(join(args.pc_dir, f"{perceptionId}_sampled.csv"), 'r') as fp:
+                csvreader = reader(fp)
+                for row in csvreader:
+                    pointxy = Geometric.rotateTuple(Geometric.translateTuple((float(row[0]), float(row[1])), translation), destination, rotation)
+                    points.append(Point(pointxy[0], pointxy[1], row[2]))
+                    labels.append(int(row[3]))
+            pointsGdf: GeoDataFrame = GeoDataFrame(data={"label": labels}, geometry=points).clip(multiPolygon, keep_geom_type=True)
+            print(len(pointsGdf), multiPolygon.__repr__())
+            rows: list[tuple[float, float, float, int]] = list()
+            pointLabel: GeoSeries
+            for _, pointLabel in pointsGdf.iterrows():
+                point: Point = pointLabel["geometry"]
+                label: int = pointLabel["label"]
+                rows.append((point.x, point.y, point.z, label))
+            with open(join(args.gen_dir, f"{run}_points.csv"), 'a') as fp:
+                csvwriter = writer(fp)
+                csvwriter.writerows(rows)
 
 if __name__ == "__main__":
     parser: ArgumentParser = ArgumentParser()
     parser.add_argument(
-        "--fp", type=str, required=True,
-        help="JSON generation file"
+        "--gen-dir", type=str, required=True,
+        help = (
+            "Directory containing pairs of\n"
+            "(1) query point cloud transformation CSV and "
+            "(2) query application MultiPolygon GeoJSON.\n"
+            "(1) must have an id column with a corresponding MultiPolygon in "
+            "(2) via its member \"id\".\n"
+            "(2) must have the same file name as (1) excluding file type extension."
+        )
     )
     parser.add_argument(
-        "--dir", type=str, required=True,
-        help="point cloud sample directory"
-    )
-    parser.add_argument(
-        "--out", type=str, default="out.csv",
-        help="output file"
+        "--pc-dir", type=str, required=True,
+        help = (
+            "Directory containing query point cloud CSVs with no header and 4 columns:\n"
+            "    x: float\n"
+            "    y: float\n"
+            "    z: float\n"
+            "label: int\n"
+            "CSVs must have filenames corresponding to values in "
+            "perceptionId column in query point cloud transformation CSV."
+        )
     )
     args: Namespace = parser.parse_args()
     main(args)

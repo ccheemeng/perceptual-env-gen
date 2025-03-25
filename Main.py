@@ -1,88 +1,51 @@
-from geopandas import GeoDataFrame, read_file # type: ignore[import-untyped]
-from shapely import Geometry, GeometryCollection, MultiPolygon, Point, Polygon
+from shapely import Point, Polygon
 
-from source import Collection, Simulator, Writer
+from source import Collection, IO, Perception, Simulator
 
 from argparse import ArgumentParser, Namespace
-from json import load
-from random import Random
 
 def main(args: Namespace) -> None:
-    random: Random = Random(args.seed)
-    querySamples: GeoDataFrame = read_file(args.fp[0])
-    siteSamples: GeoDataFrame = read_file(args.fp[1])
-    site: list[Polygon] = list()
-    geometry: Geometry
-    for geometry in read_file(args.fp[2])["geometry"].values:
-        site.extend(geometryToPolygons(geometry))
-    validateInput(querySamples, siteSamples, site)
-    queryCollection: Collection = Collection.fromGeoDataFrame(querySamples)
-    siteCollection: Collection = Collection.fromGeoDataFrame(siteSamples)
-    simulator: Simulator = Simulator(queryCollection, siteCollection)
-    output: list[tuple[Polygon, list[tuple[Point, Point, float, Polygon]]]] = list()
-    polygon: Polygon
-    for polygon in site:
-        output.append((polygon, simulator.run(polygon)))
-    Writer(args.out).write(output)
-    return
-
-# to delegate to geometry helper class
-def geometryToPolygons(geometry: Geometry) -> list[Polygon]:
-    if isinstance(geometry, Polygon):
-        return [geometry]
-    if isinstance(geometry, MultiPolygon):
-        return list(geometry.geoms)
-    if isinstance(geometry, GeometryCollection):
-        newPolygons: list[Polygon] = list()
-        for geom in geometry.geoms:
-            newPolygons.extend(geometryToPolygons(geom))
-        return newPolygons
-    return list()
-
-def validateInput(
-        querySamples: GeoDataFrame,
-        siteSamples: GeoDataFrame,
-        site: list[Polygon]
-) -> None:
-    validateSamples(querySamples)
-    validateSamples(siteSamples)
-    validateSite(site)
-
-def validateSamples(samples: GeoDataFrame) -> None:
-    exception: bool = False
-    try:
-        samples["geometry"]
-    except KeyError:
-        print("Input file has no geometry!")
-        exception = True
-    try:
-        samples["cluster"]
-    except KeyError:
-        print("Input file has no cluster!")
-        exception = True
-    if exception:
-        exit()
-
-def validateSite(site: list[Polygon]) -> None:
-    if len(site) <= 0:
-        raise ValueError("No input polygons found!")
+    queryCollection: Collection = IO.initCollection(args.query_fps[0], args.query_fps[1], args.query_fps[2])
+    siteCollection: Collection = IO.initCollection(args.site_fps[0], args.site_fps[1], args.site_fps[2])
+    sitePolygons: list[tuple[str, Polygon]] = IO.initPolygons(args.polygon_fp)
+    siteCollection = siteCollection.filter([polygon for id, polygon in sitePolygons])
+    simulator: Simulator = Simulator(queryCollection)
+    generations: list[tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...]]]]] = list()
+    id: str
+    sitePolygon: Polygon
+    for id, sitePolygon in sitePolygons:
+        generations.append((id, simulator.run(sitePolygon, siteCollection)))
+    generation: tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...]]]]
+    for generation in generations:
+        IO.write(args.out, generation[0], generation[1])
 
 if __name__ == "__main__":
     parser: ArgumentParser = ArgumentParser()
     parser.add_argument(
-        "--fp", nargs=3, type=str, required=True,
-        help=(
-            "GeoJSON filepaths for (1) query samples, "
-            "(2) site samples, and (3) site (multi)polygon"
+        "--query-fps", nargs=3, type=str, required=True,
+        help = (
+            "(1) query points GeoJSON, (2) query regions GeoJSON, "
+            "and (3) query sample clusters CSV.\n"
+            "(1) and (2) must have matching members with the name \"id\", "
+            "and (3) must have a matching id column and cluster column."
         )
     )
     parser.add_argument(
-        "--out", type=str, default="out",
-        help="output directory"
+        "--site-fps", nargs=3, type=str, required=True,
+        help = (
+            "(1) site points GeoJSON, (2) site regions GeoJSON, "
+            "and (3) site sample clusters CSV.\n"
+            "(1) and (2) must have matching members with the name \"id\", "
+            "and (3) must have a matching id column and cluster column."
+        )
     )
     parser.add_argument(
-        "--seed", type=str, required=False, default='0',
-        help=("Seed for RNG")
+        "--polygon-fp", type=str, required=True,
+        help="Site polygons GeoJSON"
+    )
+    parser.add_argument(
+        "--out", type=str, default="out",
+        help="Output directory"
     )
     args: Namespace = parser.parse_args()
     main(args)

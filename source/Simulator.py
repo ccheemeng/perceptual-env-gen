@@ -1,3 +1,4 @@
+from geopandas import GeoDataFrame
 from shapely import Geometry, MultiPoint, MultiPolygon, Point, Polygon, difference, intersection, union_all, voronoi_polygons
 
 from .Collection import Collection
@@ -6,6 +7,8 @@ from .Perception import Perception
 from .Sample import Sample
 
 from queue import Queue
+import random
+import math
 
 class Simulator:
     MAX_GEN_DIST: float = 40
@@ -22,6 +25,7 @@ class Simulator:
         # list[tuple[queryPerception, destination, rotation, generatedPolygon]]
         generation: list[tuple[Perception, Point, float, tuple[Polygon, ...]]] = list()
         while not polygonQueue.empty():
+            print("=========================")
             polygon: Polygon = polygonQueue.get()
             print(f"Generating for {polygon.__repr__()}")
             print(f"{polygonQueue.qsize()} left in queue")
@@ -41,7 +45,6 @@ class Simulator:
                     print(f"{remainingPolygon.__repr__()} put in queue")
             siteCollection = newCollection
             print(f"Site: {siteCollection}")
-            print("=========================")
         return generation
     
     def generate(self, polygon: Polygon, siteCollection: Collection) -> tuple[list[tuple[Perception, Point, float, tuple[Polygon, ...]]], list[Polygon], Collection]:
@@ -60,11 +63,11 @@ class Simulator:
             distance: float
             queryPerception: Perception
             rotation: float
-            distance, queryPerception, rotation = self.queryCollection.findSimilar(sitePerception)
-            # queryPerception, rotation = (self.queryCollection.getPerceptions()[0], 0)
+            # distance, queryPerception, rotation = self.queryCollection.findSimilar(sitePerception)
+            queryPerception, rotation = (random.choice(self.queryCollection.getPerceptions()), random.random() * 2 * math.pi)
             origin: Point = queryPerception.getPoint()
             destination: Point = sitePerception.getPoint()
-            transformedQueryPolygon: Polygon = Geometric.rotate(Geometric.translate(queryPerception.getRegion(), origin, destination), destination, rotation) # type: ignore[assignment]
+            transformedQueryPolygon: Polygon = Geometric.rotateAboutShapely(Geometric.translateOD(queryPerception.getRegion(), origin, destination), destination, rotation) # type: ignore[assignment]
             generatedPolygon: Geometry = intersection(transformedQueryPolygon, generatingPolygon)
             generatedPolygons: list[Polygon] = Geometric.geometryToPolygons(generatedPolygon)
             generatedPolygons = list(filter(lambda p: not p.is_empty, generatedPolygons))
@@ -73,7 +76,7 @@ class Simulator:
                 continue
             remainingPolygons: list[Polygon] = Geometric.geometryToPolygons(difference(generatingPolygon, MultiPolygon(generatedPolygons)))
             remainingPolygons = list(filter(lambda p: not p.is_empty, remainingPolygons))
-            clippingPolygons: list[Polygon] = [Geometric.translate(Geometric.rotate(polygon, destination, -rotation), destination, origin) for polygon in generatedPolygons] # type: ignore[misc]
+            clippingPolygons: list[Polygon] = [Geometric.translateOD(Geometric.rotateAboutShapely(polygon, destination, -rotation), destination, origin) for polygon in generatedPolygons] # type: ignore[misc]
             sampleSetInClip: set[Sample] = set()
             for polygon in clippingPolygons:
                 samples: list[Sample] = self.queryCollection.samplesInPolygon(polygon)
@@ -87,7 +90,7 @@ class Simulator:
                 newId: str = associatedPerception.getId()
                 newPoint: Point = newSample.getPoint()
                 newRegion: Polygon = associatedPerception.getRegion()
-                newRegion = Geometric.rotate(Geometric.translate(newRegion, origin, destination), destination, rotation) # type: ignore[assignment]
+                newRegion = Geometric.rotateAboutShapely(Geometric.translateOD(newRegion, origin, destination), destination, rotation) # type: ignore[assignment]
                 newIds.append(newId)
                 newPoints.append(newPoint)
                 newRegions.append(newRegion)
@@ -101,13 +104,13 @@ class Simulator:
     def findGenerators(self, polygon: Polygon, siteCollection: Collection) -> list[tuple[Perception, Polygon]]:
         generators: list[tuple[Perception, Polygon]] = list()
         sitePerceptions: list[Perception] = siteCollection.getPerceptions()
+        perceptionsGdf: GeoDataFrame = GeoDataFrame(data={"perception": sitePerceptions}, geometry=[perception.getPoint() for perception in sitePerceptions])
+        perceptionsGdf["distToPolygon"] = perceptionsGdf["geometry"].distance(polygon)
+        perceptionsGdf = perceptionsGdf.drop(perceptionsGdf.loc[perceptionsGdf["distToPolygon"] > self.max_gen_dist].index)
+        perceptionsGdf = perceptionsGdf.drop_duplicates(subset="geometry")
         perceptionPoints: list[tuple[Perception, Point]] = list()
-        sitePerception: Perception
-        for sitePerception in sitePerceptions:
-            perceptionPoint: Point = sitePerception.getPoint()
-            distanceToPolygon: float = perceptionPoint.distance(polygon)
-            if distanceToPolygon <= self.max_gen_dist:
-                perceptionPoints.append((sitePerception, perceptionPoint))
+        for index, row in perceptionsGdf.iterrows():
+            perceptionPoints.append((row["perception"], row["geometry"]))
         if len(perceptionPoints) <= 1:
             return [(perceptionPoint[0], polygon) for perceptionPoint in perceptionPoints]
         voronoiPolygons: list[Polygon] = Geometric.voronoiPolygons([perceptionPoint[1] for perceptionPoint in perceptionPoints], extendTo=polygon)

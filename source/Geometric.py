@@ -80,7 +80,7 @@ class Geometric:
         if isinstance(geometry, MultiLineString):
             raise NotImplementedError("MultiLineString not implemented!")
         if isinstance(geometry, MultiPolygon):
-            raise NotImplementedError("MultiPolygon not implemented!")
+            return MultiPolygon([Geometric.translatePolygon(polygon, vector) for polygon in geometry.geoms])
         if isinstance(geometry, GeometryCollection):
             raise NotImplementedError("GeometryCollection not implemented!")
         if isinstance(geometry, Sequence):
@@ -132,7 +132,7 @@ class Geometric:
         if isinstance(geometry, MultiLineString):
             raise NotImplementedError("MultiLineString not implemented!")
         if isinstance(geometry, MultiPolygon):
-            raise NotImplementedError("MultiPolygon not implemented!")
+            return MultiPolygon([Geometric.rotatePolygon(polygon, origin, rotation) for polygon in geometry.geoms])
         if isinstance(geometry, GeometryCollection):
             raise NotImplementedError("GeometryCollection not implemented!")
         if isinstance(geometry, Sequence):

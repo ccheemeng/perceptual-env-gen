@@ -8,6 +8,7 @@ from .Sample import Sample
 
 from csv import reader, writer
 from json import dump, load
+from os import walk
 from os.path import join
 from pathlib import Path
 
@@ -70,14 +71,14 @@ class IO:
     def write(dir: str, siteId: str, generation: list[tuple[Perception, Point, float, tuple[Polygon, ...]]]) -> None:
         outputDir: str = join("runs", dir)
         Path(outputDir).mkdir(parents=True, exist_ok=True)
-        rows: list[tuple[int, str, float, float, float, float, float, float, float]] = [
-            (i, generation[i][0].getId(), generation[i][0].getPoint().x, generation[i][0].getPoint().y,
+        rows: list[tuple[str, str, float, float, float, float, float, float, float]] = [
+            (str(i), generation[i][0].getId(), generation[i][0].getPoint().x, generation[i][0].getPoint().y,
             generation[i][1].x, generation[i][1].y,
             generation[i][1].x - generation[i][0].getPoint().x,
             generation[i][1].y - generation[i][0].getPoint().y, generation[i][2])
             for i in range(len(generation))
         ]
-        id: list[int] = [row[0] for row in rows]
+        id: list[str] = [row[0] for row in rows]
         multiPolygons: list[MultiPolygon] = [MultiPolygon(g[3]) for g in generation]
         polygonsGdf: GeoDataFrame = GeoDataFrame(geometry=multiPolygons, index=id)
         with open(join(outputDir, f"{siteId}.csv"), 'w') as fp:
@@ -86,3 +87,15 @@ class IO:
             csvwriter.writerows(rows)
         with open(join(outputDir, f"{siteId}.geojson"), 'w') as fp:
             dump(polygonsGdf.to_geo_dict(), fp)
+
+    @staticmethod
+    def collectRuns(genDir: str) -> list[str]:
+        runNames: set[str] = set()
+        dirpath: str
+        dirnames: list[str]
+        filenames: list[str]
+        for dirpath, dirnames, filenames in walk(genDir):
+            filename: str
+            for filename in filenames:
+                runNames.add('.'.join(filename.split('.')[:-1]))
+        return list(runNames)

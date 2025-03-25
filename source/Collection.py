@@ -1,3 +1,4 @@
+from geopandas import GeoDataFrame
 from shapely import MultiPolygon, Point, Polygon, union_all
 
 from .Geometric import Geometric
@@ -22,10 +23,15 @@ class Collection:
         print("Initialising collection...")
         if len(ids) != len(points) or len(ids) != len(regions):
             raise ValueError("Number of ids, points, and regions must match!")
+        samplesList: list[Sample] = list(samples)
+        samplesGdf: GeoDataFrame = GeoDataFrame(data={"sample": samplesList}, geometry=[sample.getPoint() for sample in samplesList])
+        samplesGdf.sindex
         perceptions: list[Perception] = list()
         i: int
         for i in range(len(ids)):
-            perceptions.append(Perception(ids[i], points[i], regions[i], samples))
+            region: Polygon = regions[i]
+            samplesInRegion: list[Sample] = samplesGdf.iloc[samplesGdf.sindex.query(region, predicate="intersects")]["sample"].to_list()
+            perceptions.append(Perception(ids[i], points[i], regions[i], samplesInRegion))
         return cls(perceptions)
     
     @staticmethod

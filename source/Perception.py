@@ -1,3 +1,4 @@
+from geopandas import GeoDataFrame
 from numpy import float64, ndarray, atan2
 from scipy.linalg import svd # type: ignore[import-untyped]
 from scipy.stats import wasserstein_distance_nd # type: ignore[import-untyped]
@@ -10,7 +11,7 @@ from typing import Collection, Self
 
 class Perception:
     def __init__(self, id: str, point: Point, region: Polygon, samples: Collection[Sample]) -> None:
-        samplesClip: tuple[Sample, ...] = tuple(filter(lambda s: s.getPoint().within(region), samples))
+        samplesClip: tuple[Sample, ...] = tuple(Perception.clipSamples(samples, region))
         sampleMap: dict[int, tuple[Sample, ...]] = Perception.mapSamples(samples)
         self.id: str = id
         self.point: Point = point
@@ -24,6 +25,11 @@ class Perception:
     def __repr__(self) -> str:
         return f"Perception: {len(self.samples)} in {self.region.__repr__()}"
     
+    @staticmethod
+    def clipSamples(samples: Collection[Sample], polygon: Polygon) -> list[Sample]:
+        samplesList: list[Sample] = list(samples)
+        return GeoDataFrame(data={"sample": samplesList}, geometry=[sample.getPoint() for sample in samplesList]).clip(polygon, keep_geom_type=True)["sample"].to_list()
+
     @staticmethod
     def mapSamples(samples: Collection[Sample]) -> dict[int, tuple[Sample, ...]]:
         sampleMap: dict[int, set[Sample]] = dict()
@@ -86,8 +92,8 @@ class Perception:
         p1Points: list[tuple[float, float]] = [(point.x - p1.point.x, point.y - p1.point.y) for point in p1ShapelyPoints]
         p2ShapelyPoints: list[Point] = [sample.getPoint() for sample in p2.sampleMap[cluster]]
         p2Points: list[tuple[float, float]] = [(point.x - p2.point.x, point.y - p2.point.y) for point in p2ShapelyPoints]
-        p2PointsRot1 = [Geometric.rotate(point, (0, 0), angle) for point in p2Points]
-        p2PointsRot2 = [Geometric.rotate(point, (0, 0), angle + PI) for point in p2Points]
+        p2PointsRot1 = [Geometric.rotateTuple(point, (0, 0), angle) for point in p2Points]
+        p2PointsRot2 = [Geometric.rotateTuple(point, (0, 0), angle + PI) for point in p2Points]
         distance1: float = wasserstein_distance_nd(p1Points, p2PointsRot1)
         distance2: float = wasserstein_distance_nd(p1Points, p2PointsRot2)
         if distance1 <= distance2:
@@ -129,7 +135,7 @@ class Perception:
                     p1ShapelyCentroid: Point = MultiPoint(p1ShapelyPoints).centroid
                     p1Centroid: tuple[float, float] = (p1ShapelyCentroid.x - p1.point.x, p1ShapelyCentroid.y - p1.point.y)
                     p2Points.extend([p1Centroid for i in range(len(p1Points) - len(p2Points))])
-            p2Points = [Geometric.rotate(point, (0, 0), rotation) for point in p2Points] # type: ignore[misc]
+            p2Points = [Geometric.rotateTuple(point, (0, 0), rotation) for point in p2Points] # type: ignore[misc]
             distance: float = wasserstein_distance_nd(p1Points, p2Points)
             totalDistance += distance
         return totalDistance

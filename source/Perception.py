@@ -19,8 +19,8 @@ class Perception:
         self.region: Polygon = region
         self.samples: tuple[Sample, ...] = tuple(samplesClip)
         self.sampleMap: dict[int, tuple[Sample, ...]] = sampleMap
-        # dict[cluster, tuple[tuple[singularValue, rightSingularVector], ...]]
-        self.svd: dict[int, tuple[tuple[float64, ndarray], ...]] = Perception.initSvd(point, sampleMap)
+        # dict[cluster, tuple[singularValue, rightSingularVector]]
+        self.svd: dict[int, tuple[float64, ndarray, float]] = Perception.initSvd(point, sampleMap)
 
     def __repr__(self) -> str:
         return f"Perception {self.id}: cluster {self.cluster} @ {self.point.__repr__()}"
@@ -47,8 +47,8 @@ class Perception:
         return sampleDistances[0][1].getCluster()
     
     @staticmethod
-    def initSvd(origin: Point, sampleMap: dict[int, tuple[Sample, ...]]) -> dict[int, tuple[tuple[float64, ndarray], ...]]:
-        clusterSvd: dict[int, tuple[tuple[float64, ndarray], ...]] = dict()
+    def initSvd(origin: Point, sampleMap: dict[int, tuple[Sample, ...]]) -> dict[int, tuple[float64, ndarray, float]]:
+        clusterSvd: dict[int, tuple[float64, ndarray, float]] = dict()
         cluster: int
         samples: tuple[Sample, ...]
         for cluster, samples in sampleMap.items():
@@ -60,91 +60,79 @@ class Perception:
             U, s, Vh = svd(a)
             sVh: list[tuple[float64, ndarray]] = list(zip(s, Vh))
             sVh.sort(reverse=True)
-            clusterSvd[cluster] = tuple(sVh)
+            angle: float = atan2(sVh[0][1][1], sVh[0][1][0])
+            clusterSvd[cluster] = (sVh[0][0], sVh[0][1], angle)
         return clusterSvd
     
-    @staticmethod
-    def rotation(p1: Self, p2: Self) -> float: # type: ignore[misc]
-        p1SampleCounts: dict[int, int] = p1.sampleCounts()
-        p2SampleCounts: dict[int, int] = p2.sampleCounts()
-        clusterIntersection: set[int] = set(p1SampleCounts.keys()).intersection(set(p2SampleCounts.keys()))
+    def rotationTo(self, other: Self) -> float:
+        selfSampleCounts: dict[int, int] = self.sampleCounts()
+        otherSampleCounts: dict[int, int] = other.sampleCounts()
+        clusterIntersection: set[int] = set(selfSampleCounts.keys()).intersection(set(selfSampleCounts.keys()))
         if len(clusterIntersection) <= 0:
             return 0
         cluster: int
-        if p1.cluster in clusterIntersection:
-            cluster = p1.cluster
+        if self.cluster in clusterIntersection:
+            cluster = self.cluster
         else:
             maxCount: int = 0
             currCluster: int
             for currCluster in clusterIntersection:
-                count: int = min(p1SampleCounts[currCluster], p2SampleCounts[currCluster])
+                count: int = min(selfSampleCounts[currCluster], otherSampleCounts[currCluster])
                 if count > maxCount:
                     maxCount = count
                     cluster = currCluster
-        p1Vector: ndarray = p1.svd[cluster][0][1]
-        p2Vector: ndarray = p2.svd[cluster][0][1]
-        angle: float = atan2(p1Vector[1], p1Vector[0]) - atan2(p2Vector[1], p2Vector[0])
-        if PI < angle <= 1.5 * PI:
-            angle = angle - PI
-        elif 1.5 * PI < angle:
-            angle = angle - 2 * PI
-        p1ShapelyPoints: list[Point] = [sample.getPoint() for sample in p1.sampleMap[cluster]]
-        p1Points: list[tuple[float, float]] = [(point.x - p1.point.x, point.y - p1.point.y) for point in p1ShapelyPoints]
-        p2ShapelyPoints: list[Point] = [sample.getPoint() for sample in p2.sampleMap[cluster]]
-        p2Points: list[tuple[float, float]] = [(point.x - p2.point.x, point.y - p2.point.y) for point in p2ShapelyPoints]
-        p2PointsRot1 = [Geometric.rotateTuple(point, (0, 0), angle) for point in p2Points]
-        p2PointsRot2 = [Geometric.rotateTuple(point, (0, 0), angle + PI) for point in p2Points]
-        distance1: float = wasserstein_distance_nd(p1Points, p2PointsRot1)
-        distance2: float = wasserstein_distance_nd(p1Points, p2PointsRot2)
-        if distance1 <= distance2:
-            return angle
-        else:
-            return angle + PI
+        selfVector: ndarray = self.svd[cluster][1]
+        selfAngle: float = other.svd[cluster][2]
+        otherVector: ndarray = self.svd[cluster][1]
+        otherAngle: float = other.svd[cluster][2]
+        angle: float = selfAngle - otherAngle
+        return angle
     
-    @staticmethod
-    def distance(p1: Self, p2: Self, rotation: float) -> float: # type: ignore[misc]
-        totalDistance: float = 0
-        clusters: set[int] = set(p1.sampleMap.keys()).union(set(p2.sampleMap.keys()))
+    def distanceRotationTo(self, other: Self) -> tuple[float, float]:
+        rotation: float = self.rotationTo(other)
+        totalDistance1: float = 0
+        totalDistance2: float = 0
+        clusters: set[int] = set(self.sampleMap.keys()).union(set(other.sampleMap.keys()))
         cluster: int
         for cluster in clusters:
-            p1Points: list[tuple[float, float]]
-            p2Points: list[tuple[float, float]]
-            if not (cluster in p1.sampleMap and cluster in p2.sampleMap):
+            selfPoints: list[tuple[float, float]]
+            otherPoints: list[tuple[float, float]]
+            if not (cluster in self.sampleMap and cluster in other.sampleMap):
                 hasCluster: Perception
-                if not cluster in p1.sampleMap:
-                    hasCluster = p2
+                if not cluster in self.sampleMap:
+                    hasCluster = other
                 else:
-                    hasCluster = p1
+                    hasCluster = self
                 shapelyPoints: list[Point] = [sample.getPoint() for sample in hasCluster.sampleMap[cluster]]
                 points: list[tuple[float, float]] = [(point.x - hasCluster.point.x, point.y - hasCluster.point.y) for point in shapelyPoints]
                 shapelyCentroid: Point = MultiPoint(shapelyPoints).centroid
                 centroid: tuple[float, float] = (shapelyCentroid.x - hasCluster.point.x, shapelyCentroid.y - hasCluster.point.y)
                 dummyPoints: list[tuple[float, float]] = [centroid for i in range(len(points))]
-                p1Points = points
-                p2Points = dummyPoints
+                selfPoints = points
+                otherPoints = dummyPoints
             else:
-                p1ShapelyPoints: list[Point] = [sample.getPoint() for sample in p1.sampleMap[cluster]]
-                p1Points = [(point.x - p1.point.x, point.y - p1.point.y) for point in p1ShapelyPoints]
-                p2ShapelyPoints: list[Point] = [sample.getPoint() for sample in p2.sampleMap[cluster]]
-                p2Points = [(point.x - p2.point.x, point.y - p2.point.y) for point in p2ShapelyPoints]
-                if len(p1Points) < len(p2Points):
-                    p2ShapelyCentroid: Point = MultiPoint(p2ShapelyPoints).centroid
-                    p2Centroid: tuple[float, float] = (p2ShapelyCentroid.x - p2.point.x, p2ShapelyCentroid.y - p2.point.y)
-                    p1Points.extend([p2Centroid for i in range(len(p2Points) - len(p1Points))])
+                selfShapelyPoints: list[Point] = [sample.getPoint() for sample in self.sampleMap[cluster]]
+                selfPoints = [(point.x - self.point.x, point.y - self.point.y) for point in selfShapelyPoints]
+                otherShapelyPoints: list[Point] = [sample.getPoint() for sample in other.sampleMap[cluster]]
+                otherPoints = [(point.x - other.point.x, point.y - other.point.y) for point in otherShapelyPoints]
+                if len(selfPoints) < len(otherPoints):
+                    otherShapelyCentroid: Point = MultiPoint(otherShapelyPoints).centroid
+                    otherCentroid: tuple[float, float] = (otherShapelyCentroid.x - other.point.x, otherShapelyCentroid.y - other.point.y)
+                    selfPoints.extend([otherCentroid for i in range(len(otherPoints) - len(otherPoints))])
                 else:
-                    p1ShapelyCentroid: Point = MultiPoint(p1ShapelyPoints).centroid
-                    p1Centroid: tuple[float, float] = (p1ShapelyCentroid.x - p1.point.x, p1ShapelyCentroid.y - p1.point.y)
-                    p2Points.extend([p1Centroid for i in range(len(p1Points) - len(p2Points))])
-            p2Points = [Geometric.rotateTuple(point, (0, 0), rotation) for point in p2Points] # type: ignore[misc]
-            distance: float = wasserstein_distance_nd(p1Points, p2Points)
-            totalDistance += distance
-        return totalDistance
-    
-    def rotationTo(self, other: Self) -> float:
-        return Perception.rotation(self, other)
-    
-    def distanceTo(self, other: Self, rotation: float) -> float:
-        return Perception.distance(self, other, rotation)
+                    selfShapelyCentroid: Point = MultiPoint(selfShapelyPoints).centroid
+                    selfCentroid: tuple[float, float] = (selfShapelyCentroid.x - self.point.x, selfShapelyCentroid.y - self.point.y)
+                    otherPoints.extend([selfCentroid for i in range(len(selfPoints) - len(selfPoints))])
+            otherPointsRot1 = [Geometric.rotateTuple(point, (0, 0), rotation) for point in otherPoints] # type: ignore[misc]
+            otherPointsRot2 = [Geometric.rotateTuple(point, (0, 0), rotation + PI) for point in otherPoints] # type: ignore[misc]
+            distance1: float = wasserstein_distance_nd(selfPoints, otherPointsRot1)
+            distance2: float = wasserstein_distance_nd(selfPoints, otherPointsRot2)
+            totalDistance1 += distance1
+            totalDistance2 += distance2
+        if totalDistance1 <= totalDistance2:
+            return (totalDistance1, rotation)
+        else:
+            return (totalDistance2, rotation + PI)
     
     def samplesInPolygon(self, polygon: Polygon) -> list[Sample]:
         samplesWithin: list[Sample] = list()

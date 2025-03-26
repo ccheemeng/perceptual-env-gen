@@ -36,8 +36,9 @@ class Collection:
     
     @staticmethod
     def calculateDistance(p1: Perception, p2: Perception) -> tuple[float, float]:
-        rotation: float = p1.rotationTo(p2)
-        distance: float = p1.distanceTo(p2, rotation)
+        distance: float
+        rotation: float
+        distance, rotation = p1.distanceRotationTo(p2)
         return (rotation, distance)
     
     def findSimilar(self, query: Perception) -> tuple[float, Perception, float]:

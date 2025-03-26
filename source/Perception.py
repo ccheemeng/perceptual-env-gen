@@ -1,4 +1,4 @@
-from geopandas import GeoDataFrame
+from geopandas import GeoDataFrame # type: ignore[import-untyped]
 from numpy import float64, ndarray, atan2
 from scipy.linalg import svd # type: ignore[import-untyped]
 from scipy.stats import wasserstein_distance_nd # type: ignore[import-untyped]
@@ -23,7 +23,7 @@ class Perception:
         self.svd: dict[int, tuple[tuple[float64, ndarray], ...]] = Perception.initSvd(point, sampleMap)
 
     def __repr__(self) -> str:
-        return f"Perception: {len(self.samples)} in {self.region.__repr__()}"
+        return f"Perception {self.id}: cluster {self.cluster} @ {self.point.__repr__()}"
     
     @staticmethod
     def clipSamples(samples: Collection[Sample], polygon: Polygon) -> list[Sample]:

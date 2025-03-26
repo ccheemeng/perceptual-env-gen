@@ -1,5 +1,7 @@
-from geopandas import GeoDataFrame
+from geopandas import GeoDataFrame # type: ignore[import-untyped]
+from pandas import DataFrame, Series
 from shapely import Geometry, MultiPoint, MultiPolygon, Point, Polygon, difference, intersection, union_all, voronoi_polygons
+from sklearn.cluster import DBSCAN # type: ignore[import-untyped]
 
 from .Collection import Collection
 from .Geometric import Geometric
@@ -13,11 +15,13 @@ import math
 class Simulator:
     MAX_GEN_DIST: float = 40
     MIN_POLYGON_AREA: float = 5
+    EPS: float = 4
 
-    def __init__(self, queryCollection: Collection, max_gen_dist: float = MAX_GEN_DIST, min_polygon_area: float = MIN_POLYGON_AREA):
+    def __init__(self, queryCollection: Collection, max_gen_dist: float = MAX_GEN_DIST, min_polygon_area: float = MIN_POLYGON_AREA, eps: float = EPS):
         self.queryCollection: Collection = queryCollection
         self.max_gen_dist: float = max_gen_dist
         self.min_polygon_area: float = min_polygon_area
+        self.eps: float = eps
 
     def run(self, site: Polygon, siteCollection: Collection) -> list[tuple[Perception, Point, float, tuple[Polygon, ...]]]:
         polygonQueue: Queue[Polygon] = Queue()
@@ -49,6 +53,7 @@ class Simulator:
     
     def generate(self, polygon: Polygon, siteCollection: Collection) -> tuple[list[tuple[Perception, Point, float, tuple[Polygon, ...]]], list[Polygon], Collection]:
         generators: list[tuple[Perception, Polygon]] = self.findGenerators(polygon, siteCollection)
+        print(generators)
         querySamplesAdded: set[Sample] = set()
         newIds: list[str] = list()
         newPoints: list[Point] = list()
@@ -63,8 +68,8 @@ class Simulator:
             distance: float
             queryPerception: Perception
             rotation: float
-            # distance, queryPerception, rotation = self.queryCollection.findSimilar(sitePerception)
-            queryPerception, rotation = (random.choice(self.queryCollection.getPerceptions()), random.random() * 2 * math.pi)
+            distance, queryPerception, rotation = self.queryCollection.findSimilar(sitePerception)
+            # queryPerception, rotation = (random.choice(self.queryCollection.getPerceptions()), random.random() * 2 * math.pi)
             origin: Point = queryPerception.getPoint()
             destination: Point = sitePerception.getPoint()
             transformedQueryPolygon: Polygon = Geometric.rotateAboutShapely(Geometric.translateOD(queryPerception.getRegion(), origin, destination), destination, rotation) # type: ignore[assignment]
@@ -108,6 +113,25 @@ class Simulator:
         perceptionsGdf["distToPolygon"] = perceptionsGdf["geometry"].distance(polygon)
         perceptionsGdf = perceptionsGdf.drop(perceptionsGdf.loc[perceptionsGdf["distToPolygon"] > self.max_gen_dist].index)
         perceptionsGdf = perceptionsGdf.drop_duplicates(subset="geometry")
+        perceptionsGdf["cluster"] = perceptionsGdf["perception"].apply(lambda p: p.getCluster())
+        cluster_group = perceptionsGdf.groupby("cluster")
+        def filterCorePoints(group: DataFrame) -> DataFrame:
+            X: list[tuple[float, float]] = [(point.x, point.y) for point in group["geometry"]]
+            dbscan: DBSCAN = DBSCAN(eps=self.eps, min_samples=1)
+            dbscan.fit(X)
+            group["label"] = dbscan.labels_
+            core = group.groupby("label")
+            def getCore(group: DataFrame) -> DataFrame:
+                points: Series = group["geometry"]
+                xs: list[float] = [point.x for point in points]
+                ys: list[float] = [point.y for point in points]
+                centroid: Point = Point(sum(xs) / len(xs), sum(ys) / len(ys))
+                group["distance"] = group["geometry"].distance(centroid)
+                group = group.sort_values("distance", axis=0)
+                group = group.drop(columns="distance")
+                return group.head(1)
+            return core.apply(getCore, include_groups=False).reset_index(level=0)
+        perceptionsGdf = cluster_group.apply(filterCorePoints, include_groups=False).reset_index(level=0)
         perceptionPoints: list[tuple[Perception, Point]] = list()
         for index, row in perceptionsGdf.iterrows():
             perceptionPoints.append((row["perception"], row["geometry"]))

@@ -15,7 +15,7 @@ import math
 class Simulator:
     MAX_GEN_DIST: float = 40
     MIN_POLYGON_AREA: float = 5
-    EPS: float = 4
+    EPS: float = 10
 
     def __init__(self, queryCollection: Collection, max_gen_dist: float = MAX_GEN_DIST, min_polygon_area: float = MIN_POLYGON_AREA, eps: float = EPS):
         self.queryCollection: Collection = queryCollection

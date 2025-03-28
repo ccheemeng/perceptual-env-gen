@@ -56,9 +56,18 @@ class IO:
 
     @staticmethod
     def initPolygons(polygons_geojson: str) -> list[tuple[str, Polygon]]:
-        polygonsGdf: GeoDataFrame
+        featureCollectionJson: str
         with open(polygons_geojson, 'r') as fp:
-            polygonsGdf = GeoDataFrame.from_features(load(fp))
+            featureCollectionJson = load(fp)
+        ids: list[str]
+        try:
+            ids = [feature["id"] for feature in featureCollectionJson["features"]]
+        except IndexError:
+            ids = list()        
+        polygonsGdf: GeoDataFrame = GeoDataFrame.from_features(featureCollectionJson)
+        if len(ids) > 0:
+            polygonsGdf.index = ids
+        print(polygonsGdf)
         polygons: list[tuple[str, Polygon]] = list()
         row: GeoSeries
         for id, row in polygonsGdf.iterrows():

@@ -1,28 +1,29 @@
 from shapely import Point, Polygon
 
-from source import Collection, IO, Perception, Simulator
+from source import Attributes, Collection, IO, Perception, Simulator
 
 from argparse import ArgumentParser, Namespace
 
 def main(args: Namespace) -> None:
-    queryCollection: Collection = IO.initCollection(args.query_fps[0], args.query_fps[1], args.query_fps[2])
-    siteCollection: Collection = IO.initCollection(args.site_fps[0], args.site_fps[1], args.site_fps[2])
-    sitePolygons: list[tuple[str, Polygon]] = IO.initPolygons(args.polygon_fp)
+    queryCollection: Collection = IO.initCollection(args.query[0], args.query[1], args.query[2])
+    siteCollection: Collection = IO.initCollection(args.site[0], args.site[1], args.site[2])
+    sitePolygons: list[tuple[str, Polygon, Attributes]] = IO.initPolygons(args.polygons)
+    queryBuildings: Buildings = IO.initBuildings(args.buildings)
     siteCollection = siteCollection.filter([polygon for id, polygon in sitePolygons])
-    simulator: Simulator = Simulator(queryCollection)
-    generations: list[tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...]]]]] = list()
+    simulator: Simulator = Simulator(queryCollection, queryBuildings)
+    generations: list[tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]]] = list()
     id: str
     sitePolygon: Polygon
-    for id, sitePolygon in sitePolygons:
-        generations.append((id, simulator.run(sitePolygon, siteCollection)))
-    generation: tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...]]]]
+    for id, sitePolygon, siteAttributes in sitePolygons:
+        generations.append((id, simulator.run(sitePolygon, siteAttributes, siteCollection)))
+    generation: tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]]
     for generation in generations:
         IO.write(args.out, generation[0], generation[1])
 
 if __name__ == "__main__":
     parser: ArgumentParser = ArgumentParser()
     parser.add_argument(
-        "--query-fps", nargs=3, type=str, required=True,
+        "-q", "--query", nargs=3, type=str, required=True,
         help = (
             "(1) query points GeoJSON, (2) query regions GeoJSON, "
             "and (3) query sample clusters CSV.\n"
@@ -31,7 +32,7 @@ if __name__ == "__main__":
         )
     )
     parser.add_argument(
-        "--site-fps", nargs=3, type=str, required=True,
+        "-s", "--site", nargs=3, type=str, required=True,
         help = (
             "(1) site points GeoJSON, (2) site regions GeoJSON, "
             "and (3) site sample clusters CSV.\n"
@@ -40,11 +41,37 @@ if __name__ == "__main__":
         )
     )
     parser.add_argument(
-        "--polygon-fp", type=str, required=True,
-        help="Site polygons GeoJSON"
+        "-p", "--polygons", type=str, required=True,
+        help="Site polygons GeoJSON.\n"
+        "Generations for each feature will be named"
+        "after the \"id\" member if present."
     )
     parser.add_argument(
-        "--out", type=str, default="out",
+        "-t", "--target", nargs=6, type=float, required=True,
+        help=(
+            "Targets for:\n"
+            "(1) residential GFA\n"
+            "(2) commercial GFA\n"
+            "(3) civic GFA\n"
+            "(4) other GFA\n"
+            "(5) site coverage\n"
+            "(6) maximum height"
+        )
+    )
+    parser.add_argument(
+        "-a", "--buildings", type=str, required=True,
+        help=(
+            "GeoJSON of polygons corresponding to query.\n"
+            "The following attributes will be taken from feature attributes if present:\n"
+            "(1) height\n"
+            "(2) residential_gfa\n"
+            "(3) commercial_gfa\n"
+            "(4) civic_gfa\n"
+            "(5) other_gfa"
+        )
+    )
+    parser.add_argument(
+        "-o", "--out", type=str, default="out",
         help="Output directory"
     )
     args: Namespace = parser.parse_args()

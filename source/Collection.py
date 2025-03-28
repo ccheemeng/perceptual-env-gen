@@ -2,6 +2,8 @@ from geopandas import GeoDataFrame # type: ignore[import-untyped]
 from shapely import MultiPolygon, Point, Polygon, union_all
 from tqdm import tqdm
 
+from .Attributes import Attributes
+from .Buildings import Buildings
 from .Geometric import Geometric
 from .Perception import Perception
 from .Sample import Sample
@@ -10,10 +12,12 @@ from typing import Collection as CollectionType, Self, Sequence
 
 class Collection:
     PERCEPTION_RADIUS: float = 100
+    NUM_CONSIDERED_PERCEPTIONS: int = 20
 
-    def __init__(self, perceptions: CollectionType[Perception], perception_radius: float = PERCEPTION_RADIUS) -> None:
+    def __init__(self, perceptions: CollectionType[Perception], perceptionRadius: float = PERCEPTION_RADIUS, numConsideredPerceptions: int = NUM_CONSIDERED_PERCEPTIONS) -> None:
         self.perceptions: tuple[Perception, ...] = tuple(perceptions)
-        self.perception_radius = perception_radius
+        self.perceptionRadius = perceptionRadius
+        self.numConsideredPerceptions = numConsideredPerceptions
 
     def __repr__(self) -> str:
         return f"Collection: {len(self.perceptions)}"
@@ -40,40 +44,65 @@ class Collection:
         rotation: float
         distance, rotation = p1.distanceRotationTo(p2)
         return (rotation, distance)
-    
-    def findSimilar(self, query: Perception) -> tuple[float, Perception, float]:
+
+    def query(self, query: Perception, queryPolygon: Polygon, queryBuildings: Buildings, target: Attributes) -> tuple[Perception, float, Polygon, Attributes]:
         print(f"Querying {self.__repr__()} with {query}")
-        similar: tuple[float, Perception, float] = self.findSimilarFast(query)[0]
-        return similar
-
-    def findSimilarFast(self, query: Perception) -> tuple[tuple[float, Perception, float], ...]:
-        perceptionDistances: list[tuple[float, Perception, float]] = list()
+        perceptionRotations: list[tuple[Perception, float]] = self.findRotations(query)
+        destination: tuple[float, float] = (query.getPoint().x, query.getPoint().y)
+        perceptionStats: list[tuple[float, Perception, float, Polygon, Attributes]] = list()
+        attributesDistance: float
+        siteRegion: Polygon
+        achievable: Attributes
+        perception: Perception
+        rotation: float
+        for perception, rotation in perceptionRotations:
+            translation: tuple[float, float] = (destination[0] - perception.getPoint().x, destination[1] - perception.getPoint().y)
+            siteRegion = Geometric.rotateAboutTuple(Geometric.translateVectorTuple(perception.getRegion(), translation), destination, rotation).intersection(queryPolygon)
+            if siteRegion.is_empty:
+                achievable = Attributes.withMaxHeight(target)
+            else:
+                queryRegion: Polygon = Geometric.translateVectorTuple(Geometric.rotateAboutTuple(siteRegion, destination, -rotation), (-translation[0], -translation[1]))
+                achievable = queryBuildings.query(queryRegion)
+            attributesDistance = target.distanceTo(achievable)
+            perceptionStats.append((attributesDistance, perception, rotation, siteRegion, achievable))
+        perceptionStats.sort(key=lambda x: x[0])
+        perceptionStats = perceptionStats[:self.numConsideredPerceptions]
+        perceptionDistances: list[tuple[float, Perception, float, Polygon, Attributes]] = list()
+        for attributesDistance, perception, rotation, siteRegion, achievable in perceptionStats:
+            distance: float = perception.distanceTo(query)
+            perceptionDistances.append(distance, perception, rotation, siteRegion, achievable)
+        perceptionDistances.sort(key=lambda x: x[0])
+        return perceptionDistances[0][1:]
+    
+    def findRotations(self, query: Perception) -> list[tuple[Perception, float]]:
+        perceptionRotations: list[tuple[Perception, float]] = list()
+        print("Calculating rotations for perceptions in query with same cluster...")
         perception: Perception
         for perception in tqdm(self.perceptions):
-            if query.getCluster() != perception.getCluster():
+            if perception.getCluster() != query.getCluster():
                 continue
-            rotation: float
-            distance: float
-            rotation, distance = Collection.calculateDistance(perception, query)
-            perceptionDistances.append((distance, perception, rotation))
-        if len(perceptionDistances) <= 0:
-            return self.findSimilarAll(query)
-        perceptionDistances.sort(key=lambda x: x[0])
-        return tuple(perceptionDistances)
-
-    def findSimilarAll(self, query: Perception) -> tuple[tuple[float, Perception, float], ...]:
-        perceptionDistances: list[tuple[float, Perception, float]] = list()
+            rotation: float = perception.rotationTo(query)
+            perceptionRotations.append((perception, rotation))
+        if len(perceptionRotations) <= 0:
+            perceptionRotations = self.findRotationsSlow(query)
+        return perceptionRotations
+    
+    def findRotationsSlow(self, query: Perception) -> list[tuple[Perception, float]]:
+        perceptionRotations: list[tuple[Perception, float]] = list()
+        print(
+            "No perceptions with same cluster found.\n"
+            "Calculating rotations for all perceptions in query..."
+        )
         perception: Perception
         for perception in tqdm(self.perceptions):
-            rotation: float
-            distance: float
-            rotation, distance = Collection.calculateDistance(perception, query)
-            perceptionDistances.append((distance, perception, rotation))
-        perceptionDistances.sort(key=lambda x: x[0])
-        return tuple(perceptionDistances)
+            rotation: float = perception.rotationTo(query)
+            perceptionRotations.append((perception, rotation))
+        if len(perceptionRotations) <= 0:
+            perceptionRotations = self.findRotationsSlow(query)
+        return perceptionRotations
 
     def filter(self, sitePolygons: list[Polygon]) -> Self:
-        sitePerceptionZones: list[Polygon] = Geometric.geometryToPolygons(union_all([sitePolygon.buffer(self.perception_radius) for sitePolygon in sitePolygons]))
+        sitePerceptionZones: list[Polygon] = Geometric.geometryToPolygons(union_all([sitePolygon.buffer(self.perceptionRadius) for sitePolygon in sitePolygons]))
         sitePerceptionZone: MultiPolygon = MultiPolygon(sitePerceptionZones)
         newPerceptions: list[Perception] = list()
         perception: Perception

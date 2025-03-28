@@ -86,6 +86,20 @@ class Perception:
         otherVector: ndarray = self.svd[cluster][1]
         otherAngle: float = other.svd[cluster][2]
         angle: float = selfAngle - otherAngle
+        if PI < angle <= 1.5 * PI:
+            angle = angle - PI
+        elif 1.5 * PI < angle:
+            angle = angle - 2 * PI
+        selfShapelyPoints: list[Point] = [sample.getPoint() for sample in self.sampleMap[cluster]]
+        selfPoints: list[tuple[float, float]] = [(point.x - self.point.x, point.y - self.point.y) for point in selfShapelyPoints]
+        otherShapelyPoints: list[Point] = [sample.getPoint() for sample in other.sampleMap[cluster]]
+        otherPoints: list[tuple[float, float]] = [(point.x - other.point.y, point.y - other.point.y) for point in otherShapelyPoints]
+        otherPointsRot1 = [Geometric.rotateTuple(point, (0, 0), angle) for point in otherPoints]
+        otherPointsRot2 = [Geometric.rotateTuple(point, (0, 0), angle + PI) for point in otherPoints]
+        distance1: float = wasserstein_distance_nd(selfPoints, otherPointsRot1)
+        distance2: float = wasserstein_distance_nd(selfPoints, otherPointsRot2)
+        if distance2 > distance1:
+            angle = angle + PI
         return angle
     
     def distanceRotationTo(self, other: Self) -> tuple[float, float]:

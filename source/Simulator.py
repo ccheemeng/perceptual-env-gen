@@ -3,6 +3,7 @@ from pandas import DataFrame, Series
 from shapely import Geometry, MultiPoint, MultiPolygon, Point, Polygon, difference, intersection, union_all, voronoi_polygons
 from sklearn.cluster import DBSCAN # type: ignore[import-untyped]
 
+from .Attributes import Attributes
 from .Collection import Collection
 from .Geometric import Geometric
 from .Perception import Perception
@@ -17,30 +18,32 @@ class Simulator:
     MIN_POLYGON_AREA: float = 5
     EPS: float = 10
 
-    def __init__(self, queryCollection: Collection, max_gen_dist: float = MAX_GEN_DIST, min_polygon_area: float = MIN_POLYGON_AREA, eps: float = EPS):
+    def __init__(self, queryCollection: Collection, queryBuildings: Buildings, max_gen_dist: float = MAX_GEN_DIST, min_polygon_area: float = MIN_POLYGON_AREA, eps: float = EPS):
         self.queryCollection: Collection = queryCollection
+        self.queryBuildings: Buildings = queryBuildings
         self.max_gen_dist: float = max_gen_dist
         self.min_polygon_area: float = min_polygon_area
         self.eps: float = eps
 
-    def run(self, site: Polygon, siteCollection: Collection) -> list[tuple[Perception, Point, float, tuple[Polygon, ...]]]:
+    def run(self, site: Polygon, target: Attributes, siteCollection: Collection) -> list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]:
         polygonQueue: Queue[Polygon] = Queue()
         polygonQueue.put(site)
         # list[tuple[queryPerception, destination, rotation, generatedPolygon]]
-        generation: list[tuple[Perception, Point, float, tuple[Polygon, ...]]] = list()
+        generation: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]] = list()
         while not polygonQueue.empty():
             print("=========================")
             polygon: Polygon = polygonQueue.get()
             print(f"Generating for {polygon.__repr__()}")
             print(f"{polygonQueue.qsize()} left in queue")
             print(f"Site: {siteCollection}")
+            print(f"Target: {target}")
             if polygon.area < self.min_polygon_area:
                 print(f"Skipping {polygon.__repr__()}: smaller than 5 m2")
                 continue
-            generated: list[tuple[Perception, Point, float, tuple[Polygon, ...]]]
+            generated: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]
             remainingPolygons: list[Polygon]
             newCollection: Collection
-            generated, remainingPolygons, newCollection = self.generate(polygon, siteCollection)
+            generated, remainingPolygons, newCollection, newTarget = self.generate(polygon, siteCollection)
             generation.extend(generated)
             remainingPolygon: Polygon
             for remainingPolygon in remainingPolygons:
@@ -48,12 +51,14 @@ class Simulator:
                     polygonQueue.put(remainingPolygon)
                     print(f"{remainingPolygon.__repr__()} put in queue")
             siteCollection = newCollection
-            print(f"Site: {siteCollection}")
+            target = newTarget
+            print(f"New site: {siteCollection}")
+            print(f"New target: {target}")
         return generation
     
-    def generate(self, polygon: Polygon, siteCollection: Collection) -> tuple[list[tuple[Perception, Point, float, tuple[Polygon, ...]]], list[Polygon], Collection]:
-        generators: list[tuple[Perception, Polygon]] = self.findGenerators(polygon, siteCollection)
-        print(generators)
+    def generate(self, polygon: Polygon, siteCollection: Collection, target: Attributes) -> tuple[list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]], list[Polygon], Collection, Attributes]:
+        generators: list[tuple[Perception, Polygon, Attributes]] = self.findGenerators(polygon, siteCollection, target)
+        print(f"{len(generators)} generators")
         querySamplesAdded: set[Sample] = set()
         newIds: list[str] = list()
         newPoints: list[Point] = list()
@@ -61,14 +66,16 @@ class Simulator:
         newSamples: list[Sample] = list()
         generated: list[tuple[Perception, Point, float, tuple[Polygon, ...]]] = list()
         leftoverPolygons: list[Polygon] = list()
-        generator: tuple[Perception, Polygon]
+        achieved: Attributes = Attributes.of()
+        generator: tuple[Perception, Polygon, Attributes]
         for generator in generators:
             sitePerception: Perception = generator[0]
             generatingPolygon: Polygon = generator[1]
-            distance: float
+            siteTarget: Attributes = generator[2]
             queryPerception: Perception
             rotation: float
-            distance, queryPerception, rotation = self.queryCollection.findSimilar(sitePerception)
+            queryAchieved: Attributes
+            queryPerception, rotation, generatedPolygon, queryAchieved = self.queryCollection.query(sitePerception, generatingPolygon, self.queryBuildings, siteTarget)
             # queryPerception, rotation = (random.choice(self.queryCollection.getPerceptions()), random.random() * 2 * math.pi)
             origin: Point = queryPerception.getPoint()
             destination: Point = sitePerception.getPoint()
@@ -102,11 +109,13 @@ class Simulator:
                 newSamples.append(newSample)
             generated.append((queryPerception, destination, rotation, tuple(generatedPolygons)))
             leftoverPolygons.extend(remainingPolygons)
+            achieved = achieved.accumulate(queryAchieved)
         leftoverPolygons = Geometric.geometryToPolygons(union_all(leftoverPolygons))
         newSiteCollection = siteCollection.update(newIds, newPoints, newRegions, newSamples)
-        return (generated, leftoverPolygons, newSiteCollection)
+        newTarget = target.subtract(achieved)
+        return (generated, leftoverPolygons, newSiteCollection, newTarget)
     
-    def findGenerators(self, polygon: Polygon, siteCollection: Collection) -> list[tuple[Perception, Polygon]]:
+    def findGenerators(self, polygon: Polygon, siteCollection: Collection, target: Attributes) -> list[tuple[Perception, Polygon, Attributes]]:
         generators: list[tuple[Perception, Polygon]] = list()
         sitePerceptions: list[Perception] = siteCollection.getPerceptions()
         perceptionsGdf: GeoDataFrame = GeoDataFrame(data={"perception": sitePerceptions}, geometry=[perception.getPoint() for perception in sitePerceptions])
@@ -136,8 +145,9 @@ class Simulator:
         for index, row in perceptionsGdf.iterrows():
             perceptionPoints.append((row["perception"], row["geometry"]))
         if len(perceptionPoints) <= 1:
-            return [(perceptionPoint[0], polygon) for perceptionPoint in perceptionPoints]
+            return [(perceptionPoint[0], polygon, target) for perceptionPoint in perceptionPoints]
         voronoiPolygons: list[Polygon] = Geometric.voronoiPolygons([perceptionPoint[1] for perceptionPoint in perceptionPoints], extendTo=polygon)
+        totalArea: float = polygon.area
         i: int
         for i in range(len(perceptionPoints)):
             perception: Perception = perceptionPoints[i][0]
@@ -147,5 +157,7 @@ class Simulator:
             for sitePolygon in sitePolygons:
                 if sitePolygon.is_empty:
                     continue
-                generators.append((perception, sitePolygon))
+                ratio: float = sitePolygon.area / totalArea
+                siteTarget: Attributes = target.ratio(ratio)
+                generators.append((perception, sitePolygon, siteTarget))
         return generators

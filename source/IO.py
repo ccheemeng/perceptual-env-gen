@@ -2,6 +2,8 @@ from geopandas import GeoDataFrame, GeoSeries, read_file # type: ignore[import-u
 from pandas import DataFrame, Series, read_csv
 from shapely import MultiPolygon, Point, Polygon
 
+from .Attributes import Attributes
+from .Buildings import Buildings
 from .Collection import Collection
 from .Perception import Perception
 from .Sample import Sample
@@ -55,7 +57,7 @@ class IO:
         return Collection.fromIdsPointsRegionsSamples(ids, points, regions, samples)
 
     @staticmethod
-    def initPolygons(polygons_geojson: str) -> list[tuple[str, Polygon]]:
+    def initPolygons(polygons_geojson: str, target_csv: str) -> list[tuple[str, Polygon, Attributes]]:
         featureCollectionJson: str
         with open(polygons_geojson, 'r') as fp:
             featureCollectionJson = load(fp)
@@ -67,14 +69,47 @@ class IO:
         polygonsGdf: GeoDataFrame = GeoDataFrame.from_features(featureCollectionJson)
         if len(ids) > 0:
             polygonsGdf.index = ids
-        print(polygonsGdf)
+        targetDf: DataFrame
+        with open(target_csv, 'r') as fp:
+            targetDf = read_csv(fp, header=0, index_col=0)
+        if not polygonsGdf.index.sort_values().equals(targetDf.index.sort_values()):
+            polygonsGdf = polygonsGdf.reset_index()
+            targetDf = targetDf.reset_index()
+        polygonsGdf = polygonsGdf.merge(targetDf)
         polygons: list[tuple[str, Polygon]] = list()
         row: GeoSeries
         for id, row in polygonsGdf.iterrows():
             polygon: Polygon = row["geometry"]
             assert isinstance(polygon, Polygon)
-            polygons.append((str(id), polygon))
+            footprintArea: float = row["site_coverage"] * polygon.area
+            attributes: Attributes = Attributes(
+                row["max_height"],
+                row["residential_gfa"],
+                row["commercial_gfa"],
+                row["civic_gfa"],
+                row["other_gfa"],
+                footprintArea,
+                polygon.area
+            )
+            polygons.append((str(id), polygon, attributes))
         return polygons
+    
+    @staticmethod
+    def initBuildings(buildings_geojson: str) -> Buildings:
+        buildingsGdf: GeoDataFrame
+        with open(buildings_geojson, 'r') as fp:
+            buildingsGdf = read_file(fp)
+        if not "height" in buildingsGdf.columns:
+            buildingsGdf["height"] = 0
+        if not "residential_gfa" in buildingsGdf.columns:
+            buildingsGdf["residential_gfa"] = 0
+        if not "commercial_gfa" in buildingsGdf.columns:
+            buildingsGdf["commercial_gfa"] = 0
+        if not "civic_gfa" in buildingsGdf.columns:
+            buildingsGdf["civic_gfa"] = 0
+        if not "other_gfa" in buildingsGdf.columns:
+            buildingsGdf["other_gfa"] = 0
+        return Buildings(buildingsGdf)
 
     @staticmethod
     def write(dir: str, siteId: str, generation: list[tuple[Perception, Point, float, tuple[Polygon, ...]]]) -> None:

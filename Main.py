@@ -7,7 +7,7 @@ from argparse import ArgumentParser, Namespace
 def main(args: Namespace) -> None:
     queryCollection: Collection = IO.initCollection(args.query[0], args.query[1], args.query[2])
     siteCollection: Collection = IO.initCollection(args.site[0], args.site[1], args.site[2])
-    sitePolygons: list[tuple[str, Polygon, Attributes]] = IO.initPolygons(args.polygons)
+    sitePolygons: list[tuple[str, Polygon, Attributes]] = IO.initPolygons(args.polygons, args.target)
     queryBuildings: Buildings = IO.initBuildings(args.buildings)
     siteCollection = siteCollection.filter([polygon for id, polygon in sitePolygons])
     simulator: Simulator = Simulator(queryCollection, queryBuildings)
@@ -50,12 +50,12 @@ if __name__ == "__main__":
         "-t", "--target", nargs=6, type=float, required=True,
         help=(
             "Targets for:\n"
-            "(1) residential GFA\n"
-            "(2) commercial GFA\n"
-            "(3) civic GFA\n"
-            "(4) other GFA\n"
-            "(5) site coverage\n"
-            "(6) maximum height"
+            "(1) residential_gfa\n"
+            "(2) commercial_gfa\n"
+            "(3) civic_gfa\n"
+            "(4) other_gfa\n"
+            "(5) site_coverage\n"
+            "(6) max_height"
         )
     )
     parser.add_argument(

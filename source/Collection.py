@@ -14,10 +14,8 @@ class Collection:
     PERCEPTION_RADIUS: float = 100
     NUM_CONSIDERED_PERCEPTIONS: int = 20
 
-    def __init__(self, perceptions: CollectionType[Perception], perceptionRadius: float = PERCEPTION_RADIUS, numConsideredPerceptions: int = NUM_CONSIDERED_PERCEPTIONS) -> None:
+    def __init__(self, perceptions: CollectionType[Perception]) -> None:
         self.perceptions: tuple[Perception, ...] = tuple(perceptions)
-        self.perceptionRadius = perceptionRadius
-        self.numConsideredPerceptions = numConsideredPerceptions
 
     def __repr__(self) -> str:
         return f"Collection: {len(self.perceptions)}"
@@ -45,7 +43,7 @@ class Collection:
         distance, rotation = p1.distanceRotationTo(p2)
         return (rotation, distance)
 
-    def query(self, query: Perception, queryPolygon: Polygon, queryBuildings: Buildings, target: Attributes) -> tuple[Perception, float, Polygon, Attributes]:
+    def query(self, query: Perception, queryPolygon: Polygon, queryBuildings: Buildings, target: Attributes) -> tuple[Perception, float, list[Polygon], Attributes]:
         print(f"Querying {self.__repr__()} with {query}")
         perceptionRotations: list[tuple[Perception, float]] = self.findRotations(query)
         destination: tuple[float, float] = (query.getPoint().x, query.getPoint().y)
@@ -58,19 +56,21 @@ class Collection:
         for perception, rotation in perceptionRotations:
             translation: tuple[float, float] = (destination[0] - perception.getPoint().x, destination[1] - perception.getPoint().y)
             siteRegion = Geometric.rotateAboutTuple(Geometric.translateVectorTuple(perception.getRegion(), translation), destination, rotation).intersection(queryPolygon)
-            if siteRegion.is_empty:
+            siteRegions: list[Polygon] = Geometric.geometryToPolygons(siteRegion)
+            siteRegions = list(filter(lambda p: not p.is_empty, siteRegions))
+            if len(siteRegions) <= 0:
                 achievable = Attributes.withMaxHeight(target)
             else:
-                queryRegion: Polygon = Geometric.translateVectorTuple(Geometric.rotateAboutTuple(siteRegion, destination, -rotation), (-translation[0], -translation[1]))
-                achievable = queryBuildings.query(queryRegion)
+                queryRegions: Polygon = [Geometric.translateVectorTuple(Geometric.rotateAboutTuple(region, destination, -rotation), (-translation[0], -translation[1])) for region in siteRegions]
+                achievable = queryBuildings.query(queryRegions)
             attributesDistance = target.distanceTo(achievable)
-            perceptionStats.append((attributesDistance, perception, rotation, siteRegion, achievable))
+            perceptionStats.append((attributesDistance, perception, rotation, siteRegions, achievable))
         perceptionStats.sort(key=lambda x: x[0])
-        perceptionStats = perceptionStats[:self.numConsideredPerceptions]
-        perceptionDistances: list[tuple[float, Perception, float, Polygon, Attributes]] = list()
-        for attributesDistance, perception, rotation, siteRegion, achievable in perceptionStats:
+        perceptionStats = perceptionStats[:self.NUM_CONSIDERED_PERCEPTIONS]
+        perceptionDistances: list[tuple[float, Perception, float, list[Polygon], Attributes]] = list()
+        for attributesDistance, perception, rotation, siteRegions, achievable in perceptionStats:
             distance: float = perception.distanceTo(query)
-            perceptionDistances.append(distance, perception, rotation, siteRegion, achievable)
+            perceptionDistances.append(distance, perception, rotation, siteRegions, achievable)
         perceptionDistances.sort(key=lambda x: x[0])
         return perceptionDistances[0][1:]
     
@@ -102,7 +102,7 @@ class Collection:
         return perceptionRotations
 
     def filter(self, sitePolygons: list[Polygon]) -> Self:
-        sitePerceptionZones: list[Polygon] = Geometric.geometryToPolygons(union_all([sitePolygon.buffer(self.perceptionRadius) for sitePolygon in sitePolygons]))
+        sitePerceptionZones: list[Polygon] = Geometric.geometryToPolygons(union_all([sitePolygon.buffer(self.PERCEPTION_RADIUS) for sitePolygon in sitePolygons]))
         sitePerceptionZone: MultiPolygon = MultiPolygon(sitePerceptionZones)
         newPerceptions: list[Perception] = list()
         perception: Perception

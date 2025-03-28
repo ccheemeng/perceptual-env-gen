@@ -1,6 +1,13 @@
 from typing import Self
 
 class Attributes:
+    HEIGHT_WEIGHT: float = 0.5
+    RESIDENTIAL_WEIGHT: float = 0.1
+    COMMERCIAL_WEIGHT: float = 0.1
+    CIVIC_WEIGHT: float = 0.1
+    OTHER_WEIGHT: float = 0.1
+    FOOTPRINT_WEIGHT: float = 0.1
+
     def __init__(self, height: float, residentialGfa: float, commercialGfa: float, civicGfa: float, otherGfa: float, footprintArea: float, siteArea: float) -> None:
         self.height: float = height
         self.residentialGfa: float = residentialGfa
@@ -53,4 +60,11 @@ class Attributes:
         )
     
     def distanceTo(self, other: Self) -> float:
-        
+        return sum([
+            self.HEIGHT_WEIGHT * max(other.height - self.height, 0),
+            self.RESIDENTIAL_WEIGHT * abs(other.residentialGfa - self.residentialGfa),
+            self.COMMERCIAL_WEIGHT * abs(other.commercialGfa - self.commercialGfa),
+            self.CIVIC_WEIGHT * abs(other.civicGfa - self.civicGfa),
+            self.OTHER_WEIGHT * abs(other.otherGfa - self.otherGfa),
+            self.FOOTPRINT_WEIGHT * abs(other.footprintArea - self.footprintArea)
+        ])

@@ -18,12 +18,9 @@ class Simulator:
     MIN_POLYGON_AREA: float = 5
     EPS: float = 10
 
-    def __init__(self, queryCollection: Collection, queryBuildings: Buildings, max_gen_dist: float = MAX_GEN_DIST, min_polygon_area: float = MIN_POLYGON_AREA, eps: float = EPS):
+    def __init__(self, queryCollection: Collection, queryBuildings: Buildings):
         self.queryCollection: Collection = queryCollection
         self.queryBuildings: Buildings = queryBuildings
-        self.max_gen_dist: float = max_gen_dist
-        self.min_polygon_area: float = min_polygon_area
-        self.eps: float = eps
 
     def run(self, site: Polygon, target: Attributes, siteCollection: Collection) -> list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]:
         polygonQueue: Queue[Polygon] = Queue()
@@ -37,7 +34,7 @@ class Simulator:
             print(f"{polygonQueue.qsize()} left in queue")
             print(f"Site: {siteCollection}")
             print(f"Target: {target}")
-            if polygon.area < self.min_polygon_area:
+            if polygon.area < self.MIN_POLYGON_AREA:
                 print(f"Skipping {polygon.__repr__()}: smaller than 5 m2")
                 continue
             generated: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]
@@ -75,14 +72,14 @@ class Simulator:
             queryPerception: Perception
             rotation: float
             queryAchieved: Attributes
-            queryPerception, rotation, generatedPolygon, queryAchieved = self.queryCollection.query(sitePerception, generatingPolygon, self.queryBuildings, siteTarget)
+            queryPerception, rotation, generatedPolygons, queryAchieved = self.queryCollection.query(sitePerception, generatingPolygon, self.queryBuildings, siteTarget)
             # queryPerception, rotation = (random.choice(self.queryCollection.getPerceptions()), random.random() * 2 * math.pi)
             origin: Point = queryPerception.getPoint()
             destination: Point = sitePerception.getPoint()
             transformedQueryPolygon: Polygon = Geometric.rotateAboutShapely(Geometric.translateOD(queryPerception.getRegion(), origin, destination), destination, rotation) # type: ignore[assignment]
-            generatedPolygon: Geometry = intersection(transformedQueryPolygon, generatingPolygon)
-            generatedPolygons: list[Polygon] = Geometric.geometryToPolygons(generatedPolygon)
-            generatedPolygons = list(filter(lambda p: not p.is_empty, generatedPolygons))
+            # generatedPolygon: Geometry = intersection(transformedQueryPolygon, generatingPolygon)
+            # generatedPolygons: list[Polygon] = Geometric.geometryToPolygons(generatedPolygon)
+            # generatedPolygons = list(filter(lambda p: not p.is_empty, generatedPolygons))
             if len(generatedPolygons) <= 0:
                 leftoverPolygons.append(generatingPolygon)
                 continue
@@ -120,13 +117,13 @@ class Simulator:
         sitePerceptions: list[Perception] = siteCollection.getPerceptions()
         perceptionsGdf: GeoDataFrame = GeoDataFrame(data={"perception": sitePerceptions}, geometry=[perception.getPoint() for perception in sitePerceptions])
         perceptionsGdf["distToPolygon"] = perceptionsGdf["geometry"].distance(polygon)
-        perceptionsGdf = perceptionsGdf.drop(perceptionsGdf.loc[perceptionsGdf["distToPolygon"] > self.max_gen_dist].index)
+        perceptionsGdf = perceptionsGdf.drop(perceptionsGdf.loc[perceptionsGdf["distToPolygon"] > self.MAX_GEN_DIST].index)
         perceptionsGdf = perceptionsGdf.drop_duplicates(subset="geometry")
         perceptionsGdf["cluster"] = perceptionsGdf["perception"].apply(lambda p: p.getCluster())
         cluster_group = perceptionsGdf.groupby("cluster")
         def filterCorePoints(group: DataFrame) -> DataFrame:
             X: list[tuple[float, float]] = [(point.x, point.y) for point in group["geometry"]]
-            dbscan: DBSCAN = DBSCAN(eps=self.eps, min_samples=1)
+            dbscan: DBSCAN = DBSCAN(eps=self.EPS, min_samples=1)
             dbscan.fit(X)
             group["label"] = dbscan.labels_
             core = group.groupby("label")

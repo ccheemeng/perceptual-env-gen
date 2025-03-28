@@ -35,42 +35,37 @@ class Collection:
             samplesInRegion: list[Sample] = samplesGdf.iloc[samplesGdf.sindex.query(region, predicate="intersects")]["sample"].to_list()
             perceptions.append(Perception(ids[i], points[i], regions[i], samplesInRegion))
         return cls(perceptions)
-    
-    @staticmethod
-    def calculateDistance(p1: Perception, p2: Perception) -> tuple[float, float]:
-        distance: float
-        rotation: float
-        distance, rotation = p1.distanceRotationTo(p2)
-        return (rotation, distance)
 
     def query(self, query: Perception, queryPolygon: Polygon, queryBuildings: Buildings, target: Attributes) -> tuple[Perception, float, list[Polygon], Attributes]:
         print(f"Querying {self.__repr__()} with {query}")
         perceptionRotations: list[tuple[Perception, float]] = self.findRotations(query)
         destination: tuple[float, float] = (query.getPoint().x, query.getPoint().y)
-        perceptionStats: list[tuple[float, Perception, float, Polygon, Attributes]] = list()
+        perceptionStats: list[tuple[float, Perception, float, list[Polygon], Attributes]] = list()
         attributesDistance: float
         siteRegion: Polygon
         achievable: Attributes
+        print("Calculating attributes with found perceptions...")
         perception: Perception
         rotation: float
-        for perception, rotation in perceptionRotations:
+        for perception, rotation in tqdm(perceptionRotations):
             translation: tuple[float, float] = (destination[0] - perception.getPoint().x, destination[1] - perception.getPoint().y)
-            siteRegion = Geometric.rotateAboutTuple(Geometric.translateVectorTuple(perception.getRegion(), translation), destination, rotation).intersection(queryPolygon)
+            siteRegion = Geometric.rotateAboutTuple(Geometric.translateVectorTuple(perception.getRegion(), translation), destination, rotation).intersection(queryPolygon) # type: ignore[attr-defined]
             siteRegions: list[Polygon] = Geometric.geometryToPolygons(siteRegion)
             siteRegions = list(filter(lambda p: not p.is_empty, siteRegions))
             if len(siteRegions) <= 0:
                 achievable = Attributes.withMaxHeight(target)
             else:
-                queryRegions: Polygon = [Geometric.translateVectorTuple(Geometric.rotateAboutTuple(region, destination, -rotation), (-translation[0], -translation[1])) for region in siteRegions]
+                queryRegions: list[Polygon] = [Geometric.translateVectorTuple(Geometric.rotateAboutTuple(region, destination, -rotation), (-translation[0], -translation[1])) for region in siteRegions] # type: ignore[misc]
                 achievable = queryBuildings.query(queryRegions)
             attributesDistance = target.distanceTo(achievable)
             perceptionStats.append((attributesDistance, perception, rotation, siteRegions, achievable))
         perceptionStats.sort(key=lambda x: x[0])
         perceptionStats = perceptionStats[:self.NUM_CONSIDERED_PERCEPTIONS]
         perceptionDistances: list[tuple[float, Perception, float, list[Polygon], Attributes]] = list()
-        for attributesDistance, perception, rotation, siteRegions, achievable in perceptionStats:
-            distance: float = perception.distanceTo(query)
-            perceptionDistances.append(distance, perception, rotation, siteRegions, achievable)
+        print(f"Calculating distances for up to top {self.NUM_CONSIDERED_PERCEPTIONS} perceptions...")
+        for attributesDistance, perception, rotation, siteRegions, achievable in tqdm(perceptionStats):
+            distance: float = perception.distanceTo(query, rotation)
+            perceptionDistances.append((distance, perception, rotation, siteRegions, achievable))
         perceptionDistances.sort(key=lambda x: x[0])
         return perceptionDistances[0][1:]
     

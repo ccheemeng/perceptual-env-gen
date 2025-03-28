@@ -63,8 +63,9 @@ class IO:
             featureCollectionJson = load(fp)
         ids: list[str]
         try:
-            ids = [feature["id"] for feature in featureCollectionJson["features"]]
+            ids = [feature["id"] for feature in featureCollectionJson["features"]] # type: ignore[index]
         except IndexError:
+            print([feature for feature in featureCollectionJson["features"]])
             ids = list()        
         polygonsGdf: GeoDataFrame = GeoDataFrame.from_features(featureCollectionJson)
         if len(ids) > 0:
@@ -75,8 +76,8 @@ class IO:
         if not polygonsGdf.index.sort_values().equals(targetDf.index.sort_values()):
             polygonsGdf = polygonsGdf.reset_index()
             targetDf = targetDf.reset_index()
-        polygonsGdf = polygonsGdf.merge(targetDf)
-        polygons: list[tuple[str, Polygon]] = list()
+        polygonsGdf = polygonsGdf.join(targetDf)
+        polygons: list[tuple[str, Polygon, Attributes]] = list()
         row: GeoSeries
         for id, row in polygonsGdf.iterrows():
             polygon: Polygon = row["geometry"]
@@ -112,7 +113,7 @@ class IO:
         return Buildings(buildingsGdf)
 
     @staticmethod
-    def write(dir: str, siteId: str, generation: list[tuple[Perception, Point, float, tuple[Polygon, ...]]]) -> None:
+    def write(dir: str, siteId: str, generation: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]) -> None:
         outputDir: str = join("runs", dir)
         Path(outputDir).mkdir(parents=True, exist_ok=True)
         rows: list[tuple[str, str, float, float, float, float, float, float, float]] = [
@@ -131,6 +132,10 @@ class IO:
             csvwriter.writerows(rows)
         with open(join(outputDir, f"{siteId}.geojson"), 'w') as fp:
             dump(polygonsGdf.to_geo_dict(), fp)
+        attributes = [g[4] for g in generation]
+        import functools
+        attributes = functools.reduce(lambda x, y: x.accumulate(y), attributes)
+        print(f"Achieved: {attributes}")
 
     @staticmethod
     def collectRuns(genDir: str) -> list[str]:

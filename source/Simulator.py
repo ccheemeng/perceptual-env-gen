@@ -4,6 +4,7 @@ from shapely import Geometry, MultiPoint, MultiPolygon, Point, Polygon, differen
 from sklearn.cluster import DBSCAN # type: ignore[import-untyped]
 
 from .Attributes import Attributes
+from .Buildings import Buildings
 from .Collection import Collection
 from .Geometric import Geometric
 from .Perception import Perception
@@ -40,7 +41,7 @@ class Simulator:
             generated: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]
             remainingPolygons: list[Polygon]
             newCollection: Collection
-            generated, remainingPolygons, newCollection, newTarget = self.generate(polygon, siteCollection)
+            generated, remainingPolygons, newCollection, newTarget = self.generate(polygon, siteCollection, target)
             generation.extend(generated)
             remainingPolygon: Polygon
             for remainingPolygon in remainingPolygons:
@@ -61,7 +62,7 @@ class Simulator:
         newPoints: list[Point] = list()
         newRegions: list[Polygon] = list()
         newSamples: list[Sample] = list()
-        generated: list[tuple[Perception, Point, float, tuple[Polygon, ...]]] = list()
+        generated: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]] = list()
         leftoverPolygons: list[Polygon] = list()
         achieved: Attributes = Attributes.of()
         generator: tuple[Perception, Polygon, Attributes]
@@ -104,7 +105,7 @@ class Simulator:
                 newPoints.append(newPoint)
                 newRegions.append(newRegion)
                 newSamples.append(newSample)
-            generated.append((queryPerception, destination, rotation, tuple(generatedPolygons)))
+            generated.append((queryPerception, destination, rotation, tuple(generatedPolygons), queryAchieved))
             leftoverPolygons.extend(remainingPolygons)
             achieved = achieved.accumulate(queryAchieved)
         leftoverPolygons = Geometric.geometryToPolygons(union_all(leftoverPolygons))
@@ -113,7 +114,7 @@ class Simulator:
         return (generated, leftoverPolygons, newSiteCollection, newTarget)
     
     def findGenerators(self, polygon: Polygon, siteCollection: Collection, target: Attributes) -> list[tuple[Perception, Polygon, Attributes]]:
-        generators: list[tuple[Perception, Polygon]] = list()
+        generators: list[tuple[Perception, Polygon, Attributes]] = list()
         sitePerceptions: list[Perception] = siteCollection.getPerceptions()
         perceptionsGdf: GeoDataFrame = GeoDataFrame(data={"perception": sitePerceptions}, geometry=[perception.getPoint() for perception in sitePerceptions])
         perceptionsGdf["distToPolygon"] = perceptionsGdf["geometry"].distance(polygon)

@@ -102,10 +102,8 @@ class Perception:
             angle = angle + PI
         return angle
     
-    def distanceRotationTo(self, other: Self) -> tuple[float, float]:
-        rotation: float = self.rotationTo(other)
-        totalDistance1: float = 0
-        totalDistance2: float = 0
+    def distanceTo(self, other: Self, rotation: float) -> float:
+        totalDistance: float = 0
         clusters: set[int] = set(self.sampleMap.keys()).union(set(other.sampleMap.keys()))
         cluster: int
         for cluster in clusters:
@@ -137,16 +135,10 @@ class Perception:
                     selfShapelyCentroid: Point = MultiPoint(selfShapelyPoints).centroid
                     selfCentroid: tuple[float, float] = (selfShapelyCentroid.x - self.point.x, selfShapelyCentroid.y - self.point.y)
                     otherPoints.extend([selfCentroid for i in range(len(selfPoints) - len(selfPoints))])
-            otherPointsRot1 = [Geometric.rotateTuple(point, (0, 0), rotation) for point in otherPoints] # type: ignore[misc]
-            otherPointsRot2 = [Geometric.rotateTuple(point, (0, 0), rotation + PI) for point in otherPoints] # type: ignore[misc]
-            distance1: float = wasserstein_distance_nd(selfPoints, otherPointsRot1)
-            distance2: float = wasserstein_distance_nd(selfPoints, otherPointsRot2)
-            totalDistance1 += distance1
-            totalDistance2 += distance2
-        if totalDistance1 <= totalDistance2:
-            return (totalDistance1, rotation)
-        else:
-            return (totalDistance2, rotation + PI)
+            otherPoints = [Geometric.rotateTuple(point, (0, 0), rotation) for point in otherPoints] # type: ignore[misc]
+            distance: float = wasserstein_distance_nd(selfPoints, otherPoints)
+            totalDistance += distance
+        return totalDistance
     
     def samplesInPolygon(self, polygon: Polygon) -> list[Sample]:
         samplesWithin: list[Sample] = list()

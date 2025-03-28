@@ -1,6 +1,6 @@
 from shapely import Point, Polygon
 
-from source import Attributes, Collection, IO, Perception, Simulator
+from source import Attributes, Buildings, Collection, IO, Perception, Simulator
 
 from argparse import ArgumentParser, Namespace
 
@@ -9,7 +9,7 @@ def main(args: Namespace) -> None:
     siteCollection: Collection = IO.initCollection(args.site[0], args.site[1], args.site[2])
     sitePolygons: list[tuple[str, Polygon, Attributes]] = IO.initPolygons(args.polygons, args.target)
     queryBuildings: Buildings = IO.initBuildings(args.buildings)
-    siteCollection = siteCollection.filter([polygon for id, polygon in sitePolygons])
+    siteCollection = siteCollection.filter([polygon for id, polygon, attributes in sitePolygons])
     simulator: Simulator = Simulator(queryCollection, queryBuildings)
     generations: list[tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]]] = list()
     id: str
@@ -47,15 +47,16 @@ if __name__ == "__main__":
         "after the \"id\" member if present."
     )
     parser.add_argument(
-        "-t", "--target", nargs=6, type=float, required=True,
+        "-t", "--target", type=str, required=True,
         help=(
-            "Targets for:\n"
+            "CSV with targets as the following columns:\n"
             "(1) residential_gfa\n"
             "(2) commercial_gfa\n"
             "(3) civic_gfa\n"
             "(4) other_gfa\n"
             "(5) site_coverage\n"
-            "(6) max_height"
+            "(6) max_height\n"
+            "and id column corresponding to site polygons."
         )
     )
     parser.add_argument(

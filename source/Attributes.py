@@ -1,12 +1,12 @@
 from typing import Self
 
 class Attributes:
-    HEIGHT_WEIGHT: float = 0.5
+    HEIGHT_WEIGHT: float = 0.1
     RESIDENTIAL_WEIGHT: float = 0.1
     COMMERCIAL_WEIGHT: float = 0.1
     CIVIC_WEIGHT: float = 0.1
     OTHER_WEIGHT: float = 0.1
-    FOOTPRINT_WEIGHT: float = 0.1
+    FOOTPRINT_WEIGHT: float = 0.5
 
     def __init__(self, height: float, residentialGfa: float, commercialGfa: float, civicGfa: float, otherGfa: float, footprintArea: float, siteArea: float) -> None:
         self.height: float = height
@@ -17,6 +17,18 @@ class Attributes:
         self.footprintArea: float = footprintArea
         self.siteArea: float = siteArea
 
+    def __repr__(self) -> str:
+        return (
+            "Attributes:\n"
+            f"Max height     : {self.height}\n"
+            f"Residential GFA: {self.residentialGfa}\n"
+            f"Commercial GFA : {self.commercialGfa}\n"
+            f"Civic GFA      : {self.civicGfa}\n"
+            f"Other GFA      : {self.otherGfa}\n"
+            f"Footprint area : {self.footprintArea}\n"
+            f"Site area      : {self.siteArea}"
+        )
+
     @classmethod
     def of(cls) -> Self:
         return cls(0, 0, 0, 0, 0, 0, 0)
@@ -25,7 +37,7 @@ class Attributes:
     def withMaxHeight(cls, attributes: Self) -> Self:
         return cls(attributes.height, 0, 0, 0, 0, 0, 0)
     
-    def accummulate(self, other: Self) -> Self:
+    def accumulate(self, other: Self) -> Self:
         return Attributes(
             max(self.height, other.height),
             self.residentialGfa + other.residentialGfa,
@@ -34,7 +46,7 @@ class Attributes:
             self.otherGfa + other.otherGfa,
             self.footprintArea + other.footprintArea,
             self.siteArea + other.siteArea
-        )
+        ) # type: ignore[return-value]
     
     def subtract(self, other: Self) -> Self:
         return Attributes(
@@ -42,9 +54,10 @@ class Attributes:
             max(self.residentialGfa - other.residentialGfa, 0),
             max(self.commercialGfa - other.commercialGfa, 0),
             max(self.civicGfa - other.civicGfa, 0),
+            max(self.otherGfa - other.otherGfa, 0),
             max(self.footprintArea - other.footprintArea, 0),
             max(self.siteArea - other.siteArea, 0),
-        )
+        ) # type: ignore[return-value]
     
     def ratio(self, ratio: float) -> Self:
         if ratio < 0:
@@ -57,7 +70,7 @@ class Attributes:
             self.otherGfa * ratio,
             self.footprintArea * ratio,
             self.siteArea * ratio
-        )
+        ) # type: ignore[return-value]
     
     def distanceTo(self, other: Self) -> float:
         return sum([

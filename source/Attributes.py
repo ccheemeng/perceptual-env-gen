@@ -1,12 +1,12 @@
 from typing import Self
 
 class Attributes:
-    HEIGHT_WEIGHT: float = 0.1
-    RESIDENTIAL_WEIGHT: float = 0.1
-    COMMERCIAL_WEIGHT: float = 0.1
-    CIVIC_WEIGHT: float = 0.1
-    OTHER_WEIGHT: float = 0.1
-    FOOTPRINT_WEIGHT: float = 0.5
+    HEIGHT_WEIGHT: float = 0.05
+    RESIDENTIAL_WEIGHT: float = 0.05
+    COMMERCIAL_WEIGHT: float = 0.05
+    CIVIC_WEIGHT: float = 0.05
+    OTHER_WEIGHT: float = 0.05
+    FOOTPRINT_WEIGHT: float = 0.75
 
     def __init__(self, height: float, residentialGfa: float, commercialGfa: float, civicGfa: float, otherGfa: float, footprintArea: float, siteArea: float) -> None:
         self.height: float = height

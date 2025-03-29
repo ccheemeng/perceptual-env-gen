@@ -10,6 +10,7 @@ from .Geometric import Geometric
 from .Perception import Perception
 from .Sample import Sample
 
+from functools import reduce
 from queue import Queue
 import random
 import math
@@ -50,8 +51,8 @@ class Simulator:
                     print(f"{remainingPolygon.__repr__()} put in queue")
             siteCollection = newCollection
             target = newTarget
-            print(f"New site: {siteCollection}")
-            print(f"New target: {target}")
+            achieved: Attributes = reduce(lambda a1, a2: a1.accumulate(a2), [g[4] for g in generated])
+            print(f"Achieved: {achieved}")
         return generation
     
     def generate(self, polygon: Polygon, siteCollection: Collection, target: Attributes) -> tuple[list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]], list[Polygon], Collection, Attributes]:

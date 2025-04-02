@@ -1,9 +1,9 @@
-from shapely import Point, Polygon
+from shapely import MultiPolygon, Point, Polygon
 
 from .Geometric import Geometric
 
 from math import cos, sin
-from typing import Self
+from typing import Self, Union
 
 class Sample:
     def __init__(self, point: Point, cluster: int) -> None:
@@ -31,7 +31,7 @@ class Sample:
         assert isinstance(newPoint, Point)
         return Sample(newPoint, self.cluster) # type: ignore[return-value]
     
-    def within(self, polygon: Polygon) -> bool:
+    def within(self, polygon: Union[Polygon, MultiPolygon]) -> bool:
         return self.point.within(polygon)
 
     def getPoint(self) -> Point:

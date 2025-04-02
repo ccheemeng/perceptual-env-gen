@@ -2,12 +2,12 @@ from geopandas import GeoDataFrame # type: ignore[import-untyped]
 from numpy import float64, ndarray, atan2
 from scipy.linalg import svd # type: ignore[import-untyped]
 from scipy.stats import wasserstein_distance_nd # type: ignore[import-untyped]
-from shapely import MultiPoint, Point, Polygon
+from shapely import MultiPoint, MultiPolygon, Point, Polygon
 
 from .Geometric import Geometric
 from .Sample import Sample
 from math import cos, sin, pi as PI
-from typing import Collection, Self
+from typing import Collection, Self, Union
 
 class Perception:
     def __init__(self, id: str, point: Point, region: Polygon, samples: Collection[Sample]) -> None:
@@ -140,7 +140,7 @@ class Perception:
             totalDistance += distance
         return totalDistance
     
-    def samplesInPolygon(self, polygon: Polygon) -> list[Sample]:
+    def samplesInPolygon(self, polygon: Union[Polygon, MultiPolygon]) -> list[Sample]:
         samplesWithin: list[Sample] = list()
         sample: Sample
         for sample in self.samples:

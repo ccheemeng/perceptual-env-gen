@@ -6,9 +6,13 @@ from source import Geometric, IO
 
 from argparse import ArgumentParser, Namespace
 from csv import reader, writer
-from os.path import join
+from os.path import basename, dirname, join
+from typing import Optional
 
 def main(args: Namespace) -> None:
+    out_dir: Optional[str] = args.out_dir
+    if out_dir == None:
+        out_dir = basename(dirname(args.gen_dir))
     runs: list[str] = IO.collectRuns(args.gen_dir)
     run: str
     for run in runs:
@@ -43,7 +47,7 @@ def main(args: Namespace) -> None:
                 point: Point = pointLabel["geometry"]
                 label: int = pointLabel["label"]
                 rows.append((point.x, point.y, point.z, label))
-            with open(join(args.gen_dir, f"{run}_points.csv"), 'a') as fp:
+            with open(join(out_dir, f"points.csv"), 'a') as fp:
                 csvwriter = writer(fp)
                 csvwriter.writerows(rows)
 
@@ -70,6 +74,13 @@ if __name__ == "__main__":
             "label: int\n"
             "CSVs must have filenames corresponding to values in "
             "perceptionId column in query point cloud transformation CSV."
+        )
+    )
+    parser.add_argument(
+        "-o", "--out-dir", type=str, required=False,
+        help = (
+            "Directory for writing output to.\n"
+            "Will be inferred from gen-dir if not provided."
         )
     )
     args: Namespace = parser.parse_args()

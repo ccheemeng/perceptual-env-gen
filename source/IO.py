@@ -123,15 +123,21 @@ class IO:
             generation[i][1].y - generation[i][0].getPoint().y, generation[i][2])
             for i in range(len(generation))
         ]
-        id: list[str] = [row[0] for row in rows]
-        multiPolygons: list[MultiPolygon] = [MultiPolygon(g[3]) for g in generation]
-        polygonsGdf: GeoDataFrame = GeoDataFrame(geometry=multiPolygons, index=id)
         with open(join(outputDir, f"{siteId}.csv"), 'w') as fp:
             csvwriter = writer(fp)
             csvwriter.writerow(("id", "perceptionId", "originX", "originY", "destinationX", "destinationY", "translationX", "translationY", "rotationCCW"))
             csvwriter.writerows(rows)
+        ids: list[str] = [row[0] for row in rows]
+        multiPolygons: list[MultiPolygon] = [MultiPolygon(g[3]) for g in generation]
+        polygonsGdf: GeoDataFrame = GeoDataFrame(geometry=multiPolygons, index=ids)
         with open(join(outputDir, f"{siteId}.geojson"), 'w') as fp:
             dump(polygonsGdf.to_geo_dict(), fp)
+        samples: list[list[Sample]] = [perception.samplesInPolygon(multiPolygon) for perception, multiPolygon in zip([g[0] for g in generation], multiPolygons)]
+        sampleRows: list[tuple[str, float, float, int]] = list()
+        id: str
+        sample: list[Sample]
+        for id, sample in zip(ids, samples):
+            
         attributes = [g[4] for g in generation]
         import functools
         attributes = functools.reduce(lambda x, y: x.accumulate(y), attributes)

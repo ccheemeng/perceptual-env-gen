@@ -5,6 +5,7 @@ from shapely import MultiPolygon, Point, Polygon
 from .Attributes import Attributes
 from .Buildings import Buildings
 from .Collection import Collection
+from .Geometric import Geometric
 from .Perception import Perception
 from .Sample import Sample
 
@@ -58,7 +59,7 @@ class IO:
 
     @staticmethod
     def initPolygons(polygons_geojson: str, target_csv: str) -> list[tuple[str, Polygon, Attributes]]:
-        featureCollectionJson: str
+        featureCollectionJson: dict
         with open(polygons_geojson, 'r') as fp:
             featureCollectionJson = load(fp)
         ids: list[str]
@@ -114,7 +115,7 @@ class IO:
 
     @staticmethod
     def write(dir: str, siteId: str, generation: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]) -> None:
-        outputDir: str = join("runs", dir)
+        outputDir: str = join("runs", dir, siteId)
         Path(outputDir).mkdir(parents=True, exist_ok=True)
         rows: list[tuple[str, str, float, float, float, float, float, float, float]] = [
             (str(i), generation[i][0].getId(), generation[i][0].getPoint().x, generation[i][0].getPoint().y,
@@ -123,34 +124,33 @@ class IO:
             generation[i][1].y - generation[i][0].getPoint().y, generation[i][2])
             for i in range(len(generation))
         ]
-        with open(join(outputDir, f"{siteId}.csv"), 'w') as fp:
+        with open(join(outputDir, "perceptions.csv"), 'w') as fp:
             csvwriter = writer(fp)
             csvwriter.writerow(("id", "perceptionId", "originX", "originY", "destinationX", "destinationY", "translationX", "translationY", "rotationCCW"))
             csvwriter.writerows(rows)
         ids: list[str] = [row[0] for row in rows]
-        multiPolygons: list[MultiPolygon] = [MultiPolygon(g[3]) for g in generation]
+        multiPolygons: list[MultiPolygon] = [Geometric.translateOD(Geometric.rotateAboutShapely(MultiPolygon(g[3]), g[1], -g[2]), g[1], g[0].getPoint()) for g in generation]
         polygonsGdf: GeoDataFrame = GeoDataFrame(geometry=multiPolygons, index=ids)
-        with open(join(outputDir, f"{siteId}.geojson"), 'w') as fp:
+        with open(join(outputDir, "polygons.geojson"), 'w') as fp:
             dump(polygonsGdf.to_geo_dict(), fp)
-        samples: list[list[Sample]] = [perception.samplesInPolygon(multiPolygon) for perception, multiPolygon in zip([g[0] for g in generation], multiPolygons)]
+        samples: list[list[Sample]] = [(samplePolygon.translate(perception.getPoint(), destination).rotate(destination, rotation) for samplePolygon in perception.samplesInPolygon(multiPolygon)) for perception, destination, rotation, multiPolygon in zip([g[0] for g in generation], [g[1] for g in generation], [g[2] for g in generation], multiPolygons)]
         sampleRows: list[tuple[str, float, float, int]] = list()
         id: str
-        sample: list[Sample]
-        for id, sample in zip(ids, samples):
-            
-        attributes = [g[4] for g in generation]
-        import functools
-        attributes = functools.reduce(lambda x, y: x.accumulate(y), attributes)
-        print(f"Achieved: {attributes}")
-
-    @staticmethod
-    def collectRuns(genDir: str) -> list[str]:
-        runNames: set[str] = set()
-        dirpath: str
-        dirnames: list[str]
-        filenames: list[str]
-        for dirpath, dirnames, filenames in walk(genDir):
-            filename: str
-            for filename in filenames:
-                runNames.add('.'.join(filename.split('.')[:-1]))
-        return list(runNames)
+        polygonSamples: list[Sample]
+        for id, polygonSamples in zip(ids, samples):
+            polygonSample: Sample
+            for polygonSample in polygonSamples:
+                point: Point = polygonSample.getPoint()
+                cluster: int = polygonSample.getCluster()
+                sampleRows.append((id, point.x, point.y, cluster))
+        with open(join(outputDir, f"samples.csv"), 'w') as fp:
+            csvwriter = writer(fp)
+            csvwriter.writerow(("id", 'x', 'y', "cluster"))
+            csvwriter.writerows(sampleRows)
+        attributes: list[Attributes] = [g[4] for g in generation]
+        with open(join(outputDir, "attributes.csv"), 'w') as fp:
+            csvwriter = writer(fp)
+            csvwriter.writerow((["id"] + list(attributes[0].csvHeader())))
+            attribute: Attributes
+            for id, attribute in zip(ids, attributes):
+                csvwriter.writerow([id] + list(attribute.toCsvRow()))

@@ -36,6 +36,20 @@ class Attributes:
     @classmethod
     def withMaxHeight(cls, attributes: Self) -> Self:
         return cls(attributes.height, 0, 0, 0, 0, 0, 0)
+
+    @staticmethod
+    def csvHeader() -> tuple[str, ...]:
+        return (
+            "maxHeight",
+            "totalGFA",
+            "residentialGFA",
+            "commercialGFA",
+            "civicGFA",
+            "otherGFA",
+            "siteCoverage",
+            "footprintArea",
+            "siteArea"
+        )
     
     def accumulate(self, other: Self) -> Self:
         return Attributes(
@@ -81,3 +95,16 @@ class Attributes:
             self.OTHER_WEIGHT * abs(other.otherGfa - self.otherGfa),
             self.FOOTPRINT_WEIGHT * abs(other.footprintArea - self.footprintArea)
         ])
+
+    def toCsvRow(self) -> tuple:
+        return (
+            self.height,
+            sum((self.residentialGfa, self.commercialGfa, self.civicGfa, self.otherGfa)),
+            self.residentialGfa,
+            self.commercialGfa,
+            self.civicGfa,
+            self.otherGfa,
+            self.footprintArea / self.siteArea,
+            self.footprintArea,
+            self.siteArea
+        )

@@ -2,25 +2,27 @@ from geopandas import GeoDataFrame, GeoSeries, read_file
 from pandas import DataFrame, read_csv
 from shapely import MultiPolygon, Point
 
-from source import Geometric, IO
+from source import Geometric
 
 from argparse import ArgumentParser, Namespace
 from csv import reader, writer
+from os import walk
 from os.path import basename, dirname, join
 from typing import Optional
 
 def main(args: Namespace) -> None:
-    out_dir: Optional[str] = args.out_dir
-    if out_dir == None:
-        out_dir = basename(dirname(args.gen_dir))
-    runs: list[str] = IO.collectRuns(args.gen_dir)
+    dirpath: str
+    runs: list[str]
+    filenames: list[str]
+    for dirpath, runs, filenames in walk(args.gen_dir):
+        break
     run: str
     for run in runs:
         transformationDf: DataFrame
-        with open(join(args.gen_dir, f"{run}.csv"), 'r') as fp:
+        with open(join(args.gen_dir, run, "perceptions.csv"), 'r') as fp:
             transformationDf = read_csv(fp, header=0, index_col=0).rename(index=(lambda i: str(i)))
         multiPolygonGdf: GeoDataFrame
-        with open(join(args.gen_dir, f"{run}.geojson"), 'r') as fp:
+        with open(join(args.gen_dir, run, "polygons.geojson"), 'r') as fp:
             multiPolygonGdf = read_file(fp)
             multiPolygonGdf = multiPolygonGdf.set_index("id", drop=True).rename(index=(lambda i: str(i)))
         index: str
@@ -39,7 +41,7 @@ def main(args: Namespace) -> None:
                     pointxy = Geometric.rotateTuple(Geometric.translateTuple((float(row[0]), float(row[1])), translation), destination, rotation)
                     points.append(Point(pointxy[0], pointxy[1], row[2]))
                     labels.append(int(row[3]))
-            pointsGdf: GeoDataFrame = GeoDataFrame(data={"label": labels}, geometry=points).clip(multiPolygon, keep_geom_type=True)
+            pointsGdf: GeoDataFrame = GeoDataFrame(data={"label": labels}, geometry=points).clip(Geometric.rotateAboutTuple(Geometric.translateVectorTuple(multiPolygon, translation), destination, rotation), keep_geom_type=True)
             print(len(pointsGdf), multiPolygon.__repr__())
             rows: list[tuple[float, float, float, int]] = list()
             pointLabel: GeoSeries
@@ -47,7 +49,7 @@ def main(args: Namespace) -> None:
                 point: Point = pointLabel["geometry"]
                 label: int = pointLabel["label"]
                 rows.append((point.x, point.y, point.z, label))
-            with open(join(out_dir, f"points.csv"), 'a') as fp:
+            with open(join(args.gen_dir, run, "points.csv"), 'a') as fp:
                 csvwriter = writer(fp)
                 csvwriter.writerows(rows)
 
@@ -56,12 +58,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--gen-dir", type=str, required=True,
         help = (
-            "Directory containing pairs of\n"
-            "(1) query point cloud transformation CSV and "
-            "(2) query application MultiPolygon GeoJSON.\n"
-            "(1) must have an id column with a corresponding MultiPolygon in "
-            "(2) via its member \"id\".\n"
-            "(2) must have the same file name as (1) excluding file type extension."
+            "Directory containing directories for each site polygon.\n" \
+            "Each site polygon directory must contain\n" \
+            "(1) perceptions.csv\n" \
+            "(2) polygons.geojson"
         )
     )
     parser.add_argument(
@@ -74,13 +74,6 @@ if __name__ == "__main__":
             "label: int\n"
             "CSVs must have filenames corresponding to values in "
             "perceptionId column in query point cloud transformation CSV."
-        )
-    )
-    parser.add_argument(
-        "-o", "--out-dir", type=str, required=False,
-        help = (
-            "Directory for writing output to.\n"
-            "Will be inferred from gen-dir if not provided."
         )
     )
     args: Namespace = parser.parse_args()

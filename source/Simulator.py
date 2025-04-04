@@ -51,7 +51,7 @@ class Simulator:
                     print(f"{remainingPolygon.__repr__()} put in queue")
             siteCollection = newCollection
             target = newTarget
-            achieved: Attributes = reduce(lambda a1, a2: a1.accumulate(a2), [g[4] for g in generated])
+            achieved: Attributes = reduce(lambda a1, a2: a1.accumulate(a2), [g[4] for g in generated], Attributes.of())
             print(f"Achieved: {achieved}")
         return generation
     

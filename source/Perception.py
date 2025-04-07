@@ -82,8 +82,8 @@ class Perception:
                     maxCount = count
                     cluster = currCluster
         selfVector: ndarray = self.svd[cluster][1]
-        selfAngle: float = other.svd[cluster][2]
-        otherVector: ndarray = self.svd[cluster][1]
+        selfAngle: float = self.svd[cluster][2]
+        otherVector: ndarray = other.svd[cluster][1]
         otherAngle: float = other.svd[cluster][2]
         angle: float = selfAngle - otherAngle
         if PI < angle <= 1.5 * PI:

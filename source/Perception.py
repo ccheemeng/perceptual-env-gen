@@ -67,7 +67,7 @@ class Perception:
     def rotationTo(self, other: Self) -> float:
         selfSampleCounts: dict[int, int] = self.sampleCounts()
         otherSampleCounts: dict[int, int] = other.sampleCounts()
-        clusterIntersection: set[int] = set(selfSampleCounts.keys()).intersection(set(selfSampleCounts.keys()))
+        clusterIntersection: set[int] = set(selfSampleCounts.keys()).intersection(set(otherSampleCounts.keys()))
         if len(clusterIntersection) <= 0:
             return 0
         cluster: int

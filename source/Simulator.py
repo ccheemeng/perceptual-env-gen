@@ -24,11 +24,11 @@ class Simulator:
         self.queryCollection: Collection = queryCollection
         self.queryBuildings: Buildings = queryBuildings
 
-    def run(self, site: Polygon, target: Attributes, siteCollection: Collection) -> list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]:
+    def run(self, site: Polygon, target: Attributes, siteCollection: Collection) -> list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes, Buildings]]:
         polygonQueue: Queue[Polygon] = Queue()
         polygonQueue.put(site)
         # list[tuple[queryPerception, destination, rotation, generatedPolygon]]
-        generation: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]] = list()
+        generation: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes, Buildings]] = list()
         while not polygonQueue.empty():
             print("=========================")
             polygon: Polygon = polygonQueue.get()
@@ -39,7 +39,7 @@ class Simulator:
             if polygon.area < self.MIN_POLYGON_AREA:
                 print(f"Skipping {polygon.__repr__()}: smaller than 5 m2")
                 continue
-            generated: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]
+            generated: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes, Buildings]]
             remainingPolygons: list[Polygon]
             newCollection: Collection
             generated, remainingPolygons, newCollection, newTarget = self.generate(polygon, siteCollection, target)
@@ -55,7 +55,7 @@ class Simulator:
             print(f"Achieved: {achieved}")
         return generation
     
-    def generate(self, polygon: Polygon, siteCollection: Collection, target: Attributes) -> tuple[list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]], list[Polygon], Collection, Attributes]:
+    def generate(self, polygon: Polygon, siteCollection: Collection, target: Attributes) -> tuple[list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes, Buildings]], list[Polygon], Collection, Attributes]:
         generators: list[tuple[Perception, Polygon, Attributes]] = self.findGenerators(polygon, siteCollection, target)
         print(f"{len(generators)} generators")
         querySamplesAdded: set[Sample] = set()
@@ -63,7 +63,7 @@ class Simulator:
         newPoints: list[Point] = list()
         newRegions: list[Polygon] = list()
         newSamples: list[Sample] = list()
-        generated: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]] = list()
+        generated: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes, Buildings]] = list()
         leftoverPolygons: list[Polygon] = list()
         achieved: Attributes = Attributes.of()
         generator: tuple[Perception, Polygon, Attributes]
@@ -73,18 +73,15 @@ class Simulator:
             siteTarget: Attributes = generator[2]
             queryPerception: Perception
             rotation: float
+            generatedPolygons: list[Polygon]
             queryAchieved: Attributes
-            queryPerception, rotation, generatedPolygons, queryAchieved = self.queryCollection.query(sitePerception, generatingPolygon, self.queryBuildings, siteTarget)
-            # queryPerception, rotation = (random.choice(self.queryCollection.getPerceptions()), random.random() * 2 * math.pi)
-            origin: Point = queryPerception.getPoint()
-            destination: Point = sitePerception.getPoint()
-            transformedQueryPolygon: Polygon = Geometric.rotateAboutShapely(Geometric.translateOD(queryPerception.getRegion(), origin, destination), destination, rotation) # type: ignore[assignment]
-            # generatedPolygon: Geometry = intersection(transformedQueryPolygon, generatingPolygon)
-            # generatedPolygons: list[Polygon] = Geometric.geometryToPolygons(generatedPolygon)
-            # generatedPolygons = list(filter(lambda p: not p.is_empty, generatedPolygons))
+            buildings: Buildings
+            queryPerception, rotation, generatedPolygons, queryAchieved, buildings = self.queryCollection.query(sitePerception, generatingPolygon, self.queryBuildings, siteTarget)
             if len(generatedPolygons) <= 0:
                 leftoverPolygons.append(generatingPolygon)
                 continue
+            origin: Point = queryPerception.getPoint()
+            destination: Point = sitePerception.getPoint()
             remainingPolygons: list[Polygon] = Geometric.geometryToPolygons(difference(generatingPolygon, MultiPolygon(generatedPolygons)))
             remainingPolygons = list(filter(lambda p: not p.is_empty, remainingPolygons))
             clippingPolygons: list[Polygon] = [Geometric.translateOD(Geometric.rotateAboutShapely(polygon, destination, -rotation), destination, origin) for polygon in generatedPolygons] # type: ignore[misc]
@@ -106,7 +103,7 @@ class Simulator:
                 newPoints.append(newPoint)
                 newRegions.append(newRegion)
                 newSamples.append(newSample)
-            generated.append((queryPerception, destination, rotation, tuple(generatedPolygons), queryAchieved))
+            generated.append((queryPerception, destination, rotation, tuple(generatedPolygons), queryAchieved, buildings))
             leftoverPolygons.extend(remainingPolygons)
             achieved = achieved.accumulate(queryAchieved)
         leftoverPolygons = Geometric.geometryToPolygons(union_all(leftoverPolygons))

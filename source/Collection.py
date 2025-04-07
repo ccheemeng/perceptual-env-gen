@@ -36,14 +36,15 @@ class Collection:
             perceptions.append(Perception(ids[i], points[i], regions[i], samplesInRegion))
         return cls(perceptions)
 
-    def query(self, query: Perception, queryPolygon: Polygon, queryBuildings: Buildings, target: Attributes) -> tuple[Perception, float, list[Polygon], Attributes]:
+    def query(self, query: Perception, queryPolygon: Polygon, queryBuildings: Buildings, target: Attributes) -> tuple[Perception, float, list[Polygon], Attributes, Buildings]:
         print(f"Querying {self.__repr__()} with {query}")
         perceptionRotations: list[tuple[Perception, float]] = self.findRotations(query)
         destination: tuple[float, float] = (query.getPoint().x, query.getPoint().y)
-        perceptionStats: list[tuple[float, Perception, float, list[Polygon], Attributes]] = list()
+        perceptionStats: list[tuple[float, Perception, float, list[Polygon], Attributes, Buildings]] = list()
         attributesDistance: float
         siteRegion: Polygon
         achievable: Attributes
+        achiveableBuildings: Buildings
         print("Calculating attributes with found perceptions...")
         perception: Perception
         rotation: float
@@ -54,18 +55,19 @@ class Collection:
             siteRegions = list(filter(lambda p: not p.is_empty, siteRegions))
             if len(siteRegions) <= 0:
                 achievable = Attributes.withMaxHeight(target)
+                achievableBuildings = Buildings.empty()
             else:
                 queryRegions: list[Polygon] = [Geometric.translateVectorTuple(Geometric.rotateAboutTuple(region, destination, -rotation), (-translation[0], -translation[1])) for region in siteRegions] # type: ignore[misc]
-                achievable = queryBuildings.query(queryRegions)
+                achievable, achievableBuildings = queryBuildings.query(queryRegions)
             attributesDistance = target.distanceTo(achievable)
-            perceptionStats.append((attributesDistance, perception, rotation, siteRegions, achievable))
+            perceptionStats.append((attributesDistance, perception, rotation, siteRegions, achievable, achievableBuildings))
         perceptionStats.sort(key=lambda x: x[0])
         perceptionStats = perceptionStats[:self.NUM_CONSIDERED_PERCEPTIONS]
-        perceptionDistances: list[tuple[float, Perception, float, list[Polygon], Attributes]] = list()
+        perceptionDistances: list[tuple[float, Perception, float, list[Polygon], Attributes, Buildings]] = list()
         print(f"Calculating distances for up to top {self.NUM_CONSIDERED_PERCEPTIONS} perceptions...")
-        for attributesDistance, perception, rotation, siteRegions, achievable in tqdm(perceptionStats):
+        for attributesDistance, perception, rotation, siteRegions, achievable, achievableBuildings in tqdm(perceptionStats):
             distance: float = perception.distanceTo(query, rotation)
-            perceptionDistances.append((distance, perception, rotation, siteRegions, achievable))
+            perceptionDistances.append((distance, perception, rotation, siteRegions, achievable, achievableBuildings))
         perceptionDistances.sort(key=lambda x: x[0])
         return perceptionDistances[0][1:]
     

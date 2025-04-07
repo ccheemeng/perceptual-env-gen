@@ -1,5 +1,5 @@
 from geopandas import GeoDataFrame, GeoSeries, read_file # type: ignore[import-untyped]
-from pandas import DataFrame, Series, read_csv
+from pandas import DataFrame, Series, concat, read_csv
 from shapely import MultiPolygon, Point, Polygon
 
 from .Attributes import Attributes
@@ -114,26 +114,27 @@ class IO:
         return Buildings(buildingsGdf)
 
     @staticmethod
-    def write(dir: str, siteId: str, generation: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]) -> None:
+    def write(dir: str, siteId: str, generation: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes, Buildings]]) -> None:
         outputDir: str = join("runs", dir, siteId)
         Path(outputDir).mkdir(parents=True, exist_ok=True)
-        rows: list[tuple[str, str, float, float, float, float, float, float, float]] = [
+        rows: list[tuple[str, str, float, float, float, float, float, float, float, int]] = [
             (str(i), generation[i][0].getId(), generation[i][0].getPoint().x, generation[i][0].getPoint().y,
             generation[i][1].x, generation[i][1].y,
             generation[i][1].x - generation[i][0].getPoint().x,
-            generation[i][1].y - generation[i][0].getPoint().y, generation[i][2])
+            generation[i][1].y - generation[i][0].getPoint().y, generation[i][2],
+            generation[i][0].getCluster())
             for i in range(len(generation))
         ]
         with open(join(outputDir, "perceptions.csv"), 'w') as fp:
             csvwriter = writer(fp)
-            csvwriter.writerow(("id", "perceptionId", "originX", "originY", "destinationX", "destinationY", "translationX", "translationY", "rotationCCW"))
+            csvwriter.writerow(("id", "perceptionId", "originX", "originY", "destinationX", "destinationY", "translationX", "translationY", "rotationCCW", "cluster"))
             csvwriter.writerows(rows)
         ids: list[str] = [row[0] for row in rows]
-        multiPolygons: list[MultiPolygon] = [Geometric.translateOD(Geometric.rotateAboutShapely(MultiPolygon(g[3]), g[1], -g[2]), g[1], g[0].getPoint()) for g in generation]
+        multiPolygons: list[MultiPolygon] = [Geometric.translateOD(Geometric.rotateAboutShapely(MultiPolygon(g[3]), g[1], -g[2]), g[1], g[0].getPoint()) for g in generation] # type: ignore[misc]
         polygonsGdf: GeoDataFrame = GeoDataFrame(geometry=multiPolygons, index=ids)
         with open(join(outputDir, "polygons.geojson"), 'w') as fp:
             dump(polygonsGdf.to_geo_dict(), fp)
-        samples: list[list[Sample]] = [(samplePolygon.translate(perception.getPoint(), destination).rotate(destination, rotation) for samplePolygon in perception.samplesInPolygon(multiPolygon)) for perception, destination, rotation, multiPolygon in zip([g[0] for g in generation], [g[1] for g in generation], [g[2] for g in generation], multiPolygons)]
+        samples: list[list[Sample]] = [perception.samplesInPolygon(multiPolygon) for perception, multiPolygon in zip([g[0] for g in generation], multiPolygons)]
         sampleRows: list[tuple[str, float, float, int]] = list()
         id: str
         polygonSamples: list[Sample]
@@ -154,3 +155,10 @@ class IO:
             attribute: Attributes
             for id, attribute in zip(ids, attributes):
                 csvwriter.writerow([id] + list(attribute.toCsvRow()))
+        buildingsPolygons: list[GeoDataFrame] = [g[5].getBuildings() for g in generation]
+        buildingPolygon: GeoDataFrame
+        for id, buildingPolygon in zip(ids, buildingsPolygons):
+            buildingPolygon["id"] = id
+        buildings: GeoDataFrame = concat(buildingsPolygons)
+        with open(join(outputDir, "buildings.geojson"), 'w') as fp:
+            dump(buildings.to_geo_dict(), fp)

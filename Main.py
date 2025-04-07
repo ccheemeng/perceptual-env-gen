@@ -11,12 +11,12 @@ def main(args: Namespace) -> None:
     queryBuildings: Buildings = IO.initBuildings(args.buildings)
     siteCollection = siteCollection.filter([polygon for id, polygon, attributes in sitePolygons])
     simulator: Simulator = Simulator(queryCollection, queryBuildings)
-    generations: list[tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]]] = list()
+    generations: list[tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes, Buildings]]]] = list()
     id: str
     sitePolygon: Polygon
     for id, sitePolygon, siteAttributes in sitePolygons:
         generations.append((id, simulator.run(sitePolygon, siteAttributes, siteCollection)))
-    generation: tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes]]]
+    generation: tuple[str, list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes, Buildings]]]
     for generation in generations:
         IO.write(args.out, generation[0], generation[1])
 

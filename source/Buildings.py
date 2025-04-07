@@ -22,7 +22,12 @@ class Buildings:
         boundary: GeoDataFrame = intersects.loc[intersects.index.difference(within.index, sort=False)]
 
         boundary = boundary[boundary.is_valid]
-        boundaryClippedGdf: GeoDataFrame = boundary.clip(region, keep_geom_type=True)
+        boundaryClippedGdf: GeoDataFrame
+        try:
+            boundaryClippedGdf = boundary.clip(region, keep_geom_type=True)
+        except Exception as e:
+            boundaryClippedGdf = boundary[0:0]
+            print(e)
         boundaryClippedGdf = boundaryClippedGdf[boundaryClippedGdf.is_valid]
         boundary = boundary.join(boundaryClippedGdf, lsuffix="_full")
         boundary["ratio"] = boundary["geometry"].area.div(boundary["geometry_full"].area)

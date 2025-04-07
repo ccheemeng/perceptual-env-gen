@@ -52,7 +52,7 @@ class Collection:
             translation: tuple[float, float] = (destination[0] - perception.getPoint().x, destination[1] - perception.getPoint().y)
             siteRegion = Geometric.rotateAboutTuple(Geometric.translateVectorTuple(perception.getRegion(), translation), destination, rotation).intersection(queryPolygon) # type: ignore[attr-defined]
             siteRegions: list[Polygon] = Geometric.geometryToPolygons(siteRegion)
-            siteRegions = list(filter(lambda p: not p.is_empty, siteRegions))
+            siteRegions = list(filter(lambda p: p.is_valid and not p.is_empty, siteRegions))
             if len(siteRegions) <= 0:
                 achievable = Attributes.withMaxHeight(target)
                 achievableBuildings = Buildings.empty()

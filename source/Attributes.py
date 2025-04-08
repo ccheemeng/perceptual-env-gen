@@ -104,7 +104,7 @@ class Attributes:
             self.commercialGfa,
             self.civicGfa,
             self.otherGfa,
-            self.footprintArea / self.siteArea,
+            self.footprintArea / self.siteArea if self.siteArea > 0 else 0,
             self.footprintArea,
             self.siteArea
         )

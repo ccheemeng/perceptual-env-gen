@@ -37,7 +37,7 @@ class Simulator:
             print(f"Site: {siteCollection}")
             print(f"Target: {target}")
             if polygon.area < self.MIN_POLYGON_AREA:
-                print(f"Skipping {polygon.__repr__()}: smaller than 5 m2")
+                print(f"Skipping {polygon.__repr__()}: smaller than {self.MIN_POLYGON_AREA} m2")
                 continue
             generated: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes, Buildings]]
             remainingPolygons: list[Polygon]

@@ -7,8 +7,7 @@ from source import Geometric
 from argparse import ArgumentParser, Namespace
 from csv import reader, writer
 from os import walk
-from os.path import basename, dirname, join
-from typing import Optional
+from os.path import join
 
 def main(args: Namespace) -> None:
     dirpath: str
@@ -35,7 +34,7 @@ def main(args: Namespace) -> None:
             multiPolygon: MultiPolygon = multiPolygon["geometry"]
             points: list[Point] = list()
             labels: list[Point] = list()
-            with open(join(args.pc_dir, f"{perceptionId}_sampled.csv"), 'r') as fp:
+            with open(join(args.pc_dir, f"{perceptionId}.csv"), 'r') as fp:
                 csvreader = reader(fp)
                 for row in csvreader:
                     pointxy = Geometric.rotateTuple(Geometric.translateTuple((float(row[0]), float(row[1])), translation), destination, rotation)

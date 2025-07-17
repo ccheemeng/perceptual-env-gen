@@ -9,9 +9,8 @@ from .Geometric import Geometric
 from .Perception import Perception
 from .Sample import Sample
 
-from csv import reader, writer
+from csv import writer
 from json import dump, load
-from os import walk
 from os.path import join
 from pathlib import Path
 
@@ -115,7 +114,7 @@ class IO:
 
     @staticmethod
     def write(dir: str, siteId: str, generation: list[tuple[Perception, Point, float, tuple[Polygon, ...], Attributes, Buildings]]) -> None:
-        outputDir: str = join("runs", dir, siteId)
+        outputDir: str = join(dir, siteId)
         Path(outputDir).mkdir(parents=True, exist_ok=True)
         rows: list[tuple[str, str, float, float, float, float, float, float, float, int]] = [
             (str(i), generation[i][0].getId(), generation[i][0].getPoint().x, generation[i][0].getPoint().y,

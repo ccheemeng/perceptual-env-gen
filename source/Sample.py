@@ -2,7 +2,6 @@ from shapely import MultiPolygon, Point, Polygon
 
 from .Geometric import Geometric
 
-from math import cos, sin
 from typing import Self, Union
 
 class Sample:

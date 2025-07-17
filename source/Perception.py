@@ -6,7 +6,7 @@ from shapely import MultiPoint, MultiPolygon, Point, Polygon
 
 from .Geometric import Geometric
 from .Sample import Sample
-from math import cos, sin, pi as PI
+from math import pi as PI
 from typing import Collection, Self, Union
 
 class Perception:

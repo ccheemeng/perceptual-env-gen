@@ -1,6 +1,6 @@
 from geopandas import GeoDataFrame # type: ignore[import-untyped]
 from pandas import DataFrame, Series
-from shapely import Geometry, MultiPoint, MultiPolygon, Point, Polygon, difference, intersection, union_all, voronoi_polygons
+from shapely import MultiPolygon, Point, Polygon, difference, intersection, union_all, voronoi_polygons
 from sklearn.cluster import DBSCAN # type: ignore[import-untyped]
 
 from .Attributes import Attributes
@@ -12,8 +12,6 @@ from .Sample import Sample
 
 from functools import reduce
 from queue import Queue
-import random
-import math
 
 class Simulator:
     MAX_GEN_DIST: float = 40

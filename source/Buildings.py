@@ -1,10 +1,9 @@
 from geopandas import GeoDataFrame # type: ignore[import-untyped]
-from pandas import DataFrame, concat
+from pandas import concat
 from shapely import MultiPolygon, Polygon
 
 from .Attributes import Attributes
 
-from functools import reduce
 from typing import Self
 
 class Buildings:

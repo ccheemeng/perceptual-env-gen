@@ -8,7 +8,15 @@ class Attributes:
     OTHER_WEIGHT: float = 0.05
     FOOTPRINT_WEIGHT: float = 0.75
 
-    def __init__(self, height: float, residentialGfa: float, commercialGfa: float, civicGfa: float, otherGfa: float, footprintArea: float, siteArea: float) -> None:
+    def __init__(self,
+        height: float,
+        residentialGfa: float,
+        commercialGfa: float,
+        civicGfa: float,
+        otherGfa: float,
+        footprintArea: float,
+        siteArea: float
+    ) -> None:
         self.height: float = height
         self.residentialGfa: float = residentialGfa
         self.commercialGfa: float = commercialGfa
@@ -26,8 +34,7 @@ class Attributes:
             f"Civic GFA      : {self.civicGfa}\n"
             f"Other GFA      : {self.otherGfa}\n"
             f"Footprint area : {self.footprintArea}\n"
-            f"Site area      : {self.siteArea}"
-        )
+            f"Site area      : {self.siteArea}")
 
     @classmethod
     def of(cls) -> Self:
@@ -89,17 +96,21 @@ class Attributes:
     def distanceTo(self, other: Self) -> float:
         return sum([
             self.HEIGHT_WEIGHT * max(other.height - self.height, 0),
-            self.RESIDENTIAL_WEIGHT * abs(other.residentialGfa - self.residentialGfa),
-            self.COMMERCIAL_WEIGHT * abs(other.commercialGfa - self.commercialGfa),
+            self.RESIDENTIAL_WEIGHT * abs(
+                other.residentialGfa - self.residentialGfa),
+            self.COMMERCIAL_WEIGHT * abs(
+                other.commercialGfa - self.commercialGfa),
             self.CIVIC_WEIGHT * abs(other.civicGfa - self.civicGfa),
             self.OTHER_WEIGHT * abs(other.otherGfa - self.otherGfa),
-            self.FOOTPRINT_WEIGHT * abs(other.footprintArea - self.footprintArea)
+            self.FOOTPRINT_WEIGHT * abs(
+                other.footprintArea - self.footprintArea)
         ])
 
     def toCsvRow(self) -> tuple:
         return (
             self.height,
-            sum((self.residentialGfa, self.commercialGfa, self.civicGfa, self.otherGfa)),
+            sum((self.residentialGfa, self.commercialGfa,
+                self.civicGfa, self.otherGfa)),
             self.residentialGfa,
             self.commercialGfa,
             self.civicGfa,

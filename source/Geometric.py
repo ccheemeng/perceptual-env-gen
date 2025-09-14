@@ -1,87 +1,118 @@
-from shapely import Geometry, GeometryCollection, LineString, LinearRing,\
-    MultiLineString, MultiPoint, MultiPolygon, Point, Polygon, voronoi_polygons
+import shapely
 
-from collections.abc import Sequence
-from math import cos, sin
-from typing import Optional
+import math
+from typing import Optional, Sequence
 
 class Geometric:
     @staticmethod
-    def geometryToPolygons(geometry: Geometry) -> list[Polygon]:
-        if isinstance(geometry, Polygon):
+    def geometryToPolygons(geometry: shapely.Geometry) -> list[shapely.Polygon]:
+        if isinstance(geometry, shapely.Polygon):
             return [geometry]
-        if isinstance(geometry, MultiPolygon):
+        if isinstance(geometry, shapely.MultiPolygon):
             return list(geometry.geoms)
-        if isinstance(geometry, GeometryCollection):
-            newPolygons: list[Polygon] = list()
+        if isinstance(geometry, shapely.GeometryCollection):
+            newPolygons: list[shapely.Polygon] = list()
             for geom in geometry.geoms:
                 newPolygons.extend(Geometric.geometryToPolygons(geom))
             return newPolygons
         return list()
     
     @staticmethod
-    def voronoiPolygons(points: list[Point], extendTo: Optional[Geometry] = None) -> list[Polygon]:
-        polygons: list[Polygon] = Geometric.geometryToPolygons(voronoi_polygons(MultiPoint(points), extend_to=extendTo))
-        sortedPolygons: list[Polygon] = list()
-        point: Point
+    def voronoiPolygons(points: list[shapely.Point],
+        extendTo: Optional[shapely.Geometry] = None) -> list[shapely.Polygon]:
+        polygons: list[shapely.Polygon] = Geometric.geometryToPolygons(
+            shapely.voronoi_polygons(
+                shapely.MultiPoint(points), extend_to=extendTo))
+        sortedPolygons: list[shapely.Polygon] = list()
+        point: shapely.Point
         for point in points:
-            polygon: Polygon
+            polygon: shapely.Polygon
             for polygon in polygons:
                 if point.within(polygon):
                     polygons.remove(polygon)
                     sortedPolygons.append(polygon)
                     break
-        assert len(sortedPolygons) == len(points), f"Could not find voronoi for {points.__repr__()}!"
+        assert (
+            len(sortedPolygons) == len(points)
+        ), f"Could not find voronoi for {points.__repr__()}!"
         return sortedPolygons
 
     @staticmethod
-    def translate(geometry: object, originOrVector: object, destination: object = None) -> object:
+    def translate(geometry: object, originOrVector: object,
+        destination: object = None) -> object:
         if destination == None:
             return Geometric.translateVector(geometry, originOrVector)
         return Geometric.translateOD(geometry, originOrVector, destination)
     
     @staticmethod
     def translateVector(geometry: object, vector: object) -> object:
-        if isinstance(vector, Point):
+        if isinstance(vector, shapely.Point):
             return Geometric.translateVectorTuple(geometry, (vector.x, vector.y))
         if isinstance(vector, Sequence):
             Geometric.checkSequence2Float(vector)
-            return Geometric.translateVectorTuple(geometry, (vector[0], vector[1]))
-        raise ValueError(f"Vector {vector} must be Point or tuple[float, float]!")
+            return Geometric.translateVectorTuple(
+                geometry, (vector[0], vector[1]))
+        raise ValueError(
+            f"Vector {vector} must be "
+            "shapely.Point or tuple[float, float]!")
         
     @staticmethod
-    def translateOD(geometry: object, origin: object, destination: object) -> object:
-        if isinstance(origin, Point) and isinstance(destination, Point):
-            return Geometric.translateVectorTuple(geometry, (destination.x - origin.x, destination.y - origin.y))
-        if isinstance(origin, Point) and isinstance(destination, Sequence):
+    def translateOD(
+        geometry: object,
+        origin: object,
+        destination: object
+    ) -> object:
+        if (
+            isinstance(origin, shapely.Point)
+            and isinstance(destination, shapely.Point)
+        ):
+            return Geometric.translateVectorTuple(
+                geometry, (destination.x - origin.x, destination.y - origin.y))
+        if (
+            isinstance(origin, shapely.Point)
+            and isinstance(destination, Sequence)
+        ):
             Geometric.checkSequence2Float(destination)
-            return Geometric.translateVectorTuple(geometry, (destination[0] - origin.x, destination[1] - origin.y))
-        if isinstance(origin, Sequence) and isinstance(destination, Point):
+            return Geometric.translateVectorTuple(geometry,
+                (destination[0] - origin.x, destination[1] - origin.y))
+        if (
+            isinstance(origin, Sequence)
+            and isinstance(destination, shapely.Point)
+        ):
             Geometric.checkSequence2Float(origin)
-            return Geometric.translateVectorTuple(geometry, (destination.x - origin[0], destination.y - origin[1]))
+            return Geometric.translateVectorTuple(geometry,
+                (destination.x - origin[0], destination.y - origin[1]))
         if isinstance(origin, Sequence) and isinstance(destination, Sequence):
             Geometric.checkSequence2Float(origin)
             Geometric.checkSequence2Float(destination)
-            return Geometric.translateVectorTuple(geometry, (destination[0] - origin[0], destination[1] - origin[1]))
-        raise ValueError(f"Origin {origin} and destination {destination} must be Point or tuple[float, float]!")
+            return Geometric.translateVectorTuple(geometry,
+                (destination[0] - origin[0], destination[1] - origin[1]))
+        raise ValueError(
+            f"Origin {origin} and destination {destination} "
+            "must be shapely.Point or tuple[float, float]!")
     
     @staticmethod
-    def translateVectorTuple(geometry: object, vector: tuple[float, float]) -> object:
-        if isinstance(geometry, Point):
+    def translateVectorTuple(
+        geometry: object,
+        vector: tuple[float, float]
+    ) -> object:
+        if isinstance(geometry, shapely.Point):
             return Geometric.translatePoint(geometry, vector)
-        if isinstance(geometry, LineString):
+        if isinstance(geometry, shapely.LineString):
             raise NotImplementedError("LineString not implemented!")
-        if isinstance(geometry, LinearRing):
+        if isinstance(geometry, shapely.LinearRing):
             raise NotImplementedError("LinearRing not implemented!")
-        if isinstance(geometry, Polygon):
+        if isinstance(geometry, shapely.Polygon):
             return Geometric.translatePolygon(geometry, vector)
-        if isinstance(geometry, MultiPoint):
+        if isinstance(geometry, shapely.MultiPoint):
             raise NotImplementedError("MultiPoint not implemented!")
-        if isinstance(geometry, MultiLineString):
+        if isinstance(geometry, shapely.MultiLineString):
             raise NotImplementedError("MultiLineString not implemented!")
-        if isinstance(geometry, MultiPolygon):
-            return MultiPolygon([Geometric.translatePolygon(polygon, vector) for polygon in geometry.geoms])
-        if isinstance(geometry, GeometryCollection):
+        if isinstance(geometry, shapely.MultiPolygon):
+            return shapely.MultiPolygon([
+                Geometric.translatePolygon(polygon, vector)
+                for polygon in geometry.geoms])
+        if isinstance(geometry, shapely.GeometryCollection):
             raise NotImplementedError("GeometryCollection not implemented!")
         if isinstance(geometry, Sequence):
             Geometric.checkSequence2Float(geometry)
@@ -89,22 +120,38 @@ class Geometric:
         raise ValueError(f"Geometry {geometry} not supported!")
         
     @staticmethod
-    def translatePoint(geometry: Point, vector: tuple[float, float]) -> Point:
-        return Point(Geometric.translateTuple((geometry.x, geometry.y), vector))
+    def translatePoint(
+        geometry: shapely.Point,
+        vector: tuple[float, float]
+    ) -> shapely.Point:
+        return shapely.Point(
+            Geometric.translateTuple((geometry.x, geometry.y), vector))
     
     @staticmethod
-    def translatePolygon(geometry: Polygon, vector: tuple[float, float]) -> Polygon:
-        exterior: list[Point] = [Geometric.translatePoint(Point(point), vector) for point in geometry.exterior.coords]
-        interiors: list[list[Point]] = [[Geometric.translatePoint(Point(point), vector) for point in interior.coords] for interior in geometry.interiors]
-        return Polygon(shell=exterior, holes=interiors)
+    def translatePolygon(
+        geometry: shapely.Polygon,
+        vector: tuple[float, float]
+    ) -> shapely.Polygon:
+        exterior: list[shapely.Point] = [
+            Geometric.translatePoint(shapely.Point(point), vector)
+            for point in geometry.exterior.coords]
+        interiors: list[list[shapely.Point]] = [
+            [
+                Geometric.translatePoint(shapely.Point(point), vector)
+                for point in interior.coords]
+            for interior in geometry.interiors]
+        return shapely.Polygon(shell=exterior, holes=interiors)
     
     @staticmethod
-    def translateTuple(geometry: tuple[float, float], vector: tuple[float, float]) -> tuple[float, float]:
+    def translateTuple(
+        geometry: tuple[float, float],
+        vector: tuple[float, float]
+    ) -> tuple[float, float]:
         return (geometry[0] + vector[0], geometry[1] + vector[1])
 
     @staticmethod
     def rotate(geometry: object, origin: object, rotation: float) -> object:
-        if isinstance(origin, Point):
+        if isinstance(origin, shapely.Point):
             return Geometric.rotateAboutShapely(geometry, origin, rotation)
         if isinstance(origin, Sequence):
             Geometric.checkSequence2Float(origin)
@@ -113,49 +160,79 @@ class Geometric:
         raise ValueError(f"Invalid origin {origin}!")
     
     @staticmethod
-    def rotateAboutShapely(geometry: object, origin: Point, rotation: float) -> object:
+    def rotateAboutShapely(
+        geometry: object,
+        origin: shapely.Point,
+        rotation: float
+    ) -> object:
         originTuple: tuple[float, float] = (origin.x, origin.y)
         return Geometric.rotateAboutTuple(geometry, originTuple, rotation)
     
     @staticmethod
-    def rotateAboutTuple(geometry: object, origin: tuple[float, float], rotation: float) -> object:
-        if isinstance(geometry, Point):
+    def rotateAboutTuple(
+        geometry: object,
+        origin: tuple[float, float],
+        rotation: float
+    ) -> object:
+        if isinstance(geometry, shapely.Point):
             return Geometric.rotatePoint(geometry, origin, rotation)
-        if isinstance(geometry, LineString):
+        if isinstance(geometry, shapely.LineString):
             raise NotImplementedError("LineString not implemented!")
-        if isinstance(geometry, LinearRing):
+        if isinstance(geometry, shapely.LinearRing):
             raise NotImplementedError("LinearRing not implemented!")
-        if isinstance(geometry, Polygon):
+        if isinstance(geometry, shapely.Polygon):
             return Geometric.rotatePolygon(geometry, origin, rotation)
-        if isinstance(geometry, MultiPoint):
+        if isinstance(geometry, shapely.MultiPoint):
             raise NotImplementedError("MultiPoint not implemented!")
-        if isinstance(geometry, MultiLineString):
+        if isinstance(geometry, shapely.MultiLineString):
             raise NotImplementedError("MultiLineString not implemented!")
-        if isinstance(geometry, MultiPolygon):
-            return MultiPolygon([Geometric.rotatePolygon(polygon, origin, rotation) for polygon in geometry.geoms])
-        if isinstance(geometry, GeometryCollection):
+        if isinstance(geometry, shapely.MultiPolygon):
+            return shapely.MultiPolygon([
+                Geometric.rotatePolygon(polygon, origin, rotation)
+                for polygon in geometry.geoms])
+        if isinstance(geometry, shapely.GeometryCollection):
             raise NotImplementedError("GeometryCollection not implemented!")
         if isinstance(geometry, Sequence):
             Geometric.checkSequence2Float(geometry)
-            return Geometric.rotateTuple((geometry[0], geometry[1]), origin, rotation)
+            return Geometric.rotateTuple(
+                (geometry[0], geometry[1]), origin, rotation)
         raise ValueError(f"Geometry {geometry} not supported!")
     
     @staticmethod
-    def rotatePoint(geometry: Point, origin: tuple[float, float], rotation: float) -> Point:
-        return Point(Geometric.rotateTuple((geometry.x, geometry.y), origin, rotation))
+    def rotatePoint(
+        geometry: shapely.Point,
+        origin: tuple[float, float],
+        rotation: float
+    ) -> shapely.Point:
+        return shapely.Point(
+            Geometric.rotateTuple((geometry.x, geometry.y), origin, rotation))
     
     @staticmethod
-    def rotatePolygon(geometry: Polygon, origin: tuple[float, float], rotation: float) -> Polygon:
-        exterior: list[Point] = [Geometric.rotatePoint(Point(point), origin, rotation) for point in geometry.exterior.coords]
-        interiors: list[list[Point]] = [[Geometric.rotatePoint(Point(point), origin, rotation) for point in interior.coords] for interior in geometry.interiors]
-        return Polygon(shell=exterior, holes=interiors)
+    def rotatePolygon(
+        geometry: shapely.Polygon,
+        origin: tuple[float, float],
+        rotation: float
+    ) -> shapely.Polygon:
+        exterior: list[shapely.Point] = [
+            Geometric.rotatePoint(shapely.Point(point), origin, rotation)
+            for point in geometry.exterior.coords]
+        interiors: list[list[shapely.Point]] = [
+            [
+                Geometric.rotatePoint(shapely.Point(point), origin, rotation)
+                for point in interior.coords]
+            for interior in geometry.interiors]
+        return shapely.Polygon(shell=exterior, holes=interiors)
     
     @staticmethod
-    def rotateTuple(geometry: tuple[float, float], origin: tuple[float, float], rotation: float) -> tuple[float, float]:
+    def rotateTuple(
+        geometry: tuple[float, float],
+        origin: tuple[float, float],
+        rotation: float
+    ) -> tuple[float, float]:
         x0: float = geometry[0] - origin[0]
         y0: float = geometry[1] - origin[1]
-        xRot: float = x0 * cos(rotation) - y0 * sin(rotation)
-        yRot: float = x0 * sin(rotation) + y0 * cos(rotation)
+        xRot: float = x0 * math.cos(rotation) - y0 * math.sin(rotation)
+        yRot: float = x0 * math.sin(rotation) + y0 * math.cos(rotation)
         xNew: float = xRot + origin[0]
         yNew: float = yRot + origin[1]
         return (xNew, yNew)
@@ -167,6 +244,7 @@ class Geometric:
             try:
                 float(x) # type: ignore[arg-type]
             except:
-                raise ValueError(f"{x} in {sequence} must be float or castable to float!")
+                raise ValueError(
+                    f"{x} in {sequence} must be float or castable to float!")
         if len(sequence) < 2:
             raise ValueError(f"{sequence} must have 2 values!")

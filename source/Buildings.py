@@ -1,10 +1,11 @@
-import geopandas # type: ignore[import-untyped]
+import geopandas  # type: ignore[import-untyped]
 import pandas as pd
 import shapely
 
 from .Attributes import Attributes
 
 from typing import Self
+
 
 class Buildings:
     def __init__(self, polygons: geopandas.GeoDataFrame) -> None:
@@ -17,11 +18,14 @@ class Buildings:
     def query(self, regions: list[shapely.Polygon]) -> tuple[Attributes, Self]:
         region: shapely.MultiPolygon = shapely.MultiPolygon(regions)
         within: geopandas.GeoDataFrame = self.polygons.iloc[
-            self.polygons.sindex.query(region, predicate="contains")]
+            self.polygons.sindex.query(region, predicate="contains")
+        ]
         intersects: geopandas.GeoDataFrame = self.polygons.iloc[
-            self.polygons.sindex.query(region, predicate="intersects")]
+            self.polygons.sindex.query(region, predicate="intersects")
+        ]
         boundary: geopandas.GeoDataFrame = intersects.loc[
-            intersects.index.difference(within.index, sort=False)]
+            intersects.index.difference(within.index, sort=False)
+        ]
         boundary = boundary[boundary.is_valid]
         boundaryClippedGdf: geopandas.GeoDataFrame
         try:
@@ -32,37 +36,41 @@ class Buildings:
         boundaryClippedGdf = boundaryClippedGdf[boundaryClippedGdf.is_valid]
         boundary = boundary.join(boundaryClippedGdf, lsuffix="_full")
         boundary["ratio"] = boundary["geometry"].area.div(
-            boundary["geometry_full"].area)
-        boundary[[
-            "residential_gfa",
-            "commercial_gfa",
-            "civic_gfa",
-            "other_gfa"
-        ]] = boundary[[
-            "residential_gfa",
-            "commercial_gfa",
-            "civic_gfa",
-            "other_gfa"
-        ]].mul(boundary["ratio"], axis=0)
-        queriedGdf: geopandas.GeoDataFrame = pd.concat((
-            within[[
-                "height",
-                "residential_gfa",
-                "commercial_gfa",
-                "civic_gfa",
-                "other_gfa",
-                "geometry"
-            ]],
-            boundary[[
-                "height",
-                "residential_gfa",
-                "commercial_gfa",
-                "civic_gfa",
-                "other_gfa",
-                "geometry"
-            ]]
-        ), axis=0)
-        
+            boundary["geometry_full"].area
+        )
+        boundary[
+            ["residential_gfa", "commercial_gfa", "civic_gfa", "other_gfa"]
+        ] = boundary[
+            ["residential_gfa", "commercial_gfa", "civic_gfa", "other_gfa"]
+        ].mul(
+            boundary["ratio"], axis=0
+        )
+        queriedGdf: geopandas.GeoDataFrame = pd.concat(
+            (
+                within[
+                    [
+                        "height",
+                        "residential_gfa",
+                        "commercial_gfa",
+                        "civic_gfa",
+                        "other_gfa",
+                        "geometry",
+                    ]
+                ],
+                boundary[
+                    [
+                        "height",
+                        "residential_gfa",
+                        "commercial_gfa",
+                        "civic_gfa",
+                        "other_gfa",
+                        "geometry",
+                    ]
+                ],
+            ),
+            axis=0,
+        )
+
         attributes: Attributes = Attributes(
             queriedGdf["height"].max(),
             queriedGdf["residential_gfa"].sum(),
@@ -70,9 +78,9 @@ class Buildings:
             queriedGdf["civic_gfa"].sum(),
             queriedGdf["other_gfa"].sum(),
             queriedGdf["geometry"].area.sum(),
-            sum([region.area for region in regions])
+            sum([region.area for region in regions]),
         )
-        return attributes, Buildings(queriedGdf) # type: ignore[return-value]
+        return attributes, Buildings(queriedGdf)  # type: ignore[return-value]
 
     def getBuildings(self) -> geopandas.GeoDataFrame:
         return self.polygons.copy()

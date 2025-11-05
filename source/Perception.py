@@ -1,7 +1,7 @@
-import geopandas # type: ignore[import-untyped]
+import geopandas  # type: ignore[import-untyped]
 import numpy as np
-from scipy import linalg # type: ignore[import-untyped]
-from scipy import stats # type: ignore[import-untyped]
+from scipy import linalg  # type: ignore[import-untyped]
+from scipy import stats  # type: ignore[import-untyped]
 import shapely
 
 from .Geometric import Geometric
@@ -9,17 +9,21 @@ from .Sample import Sample
 import math
 from typing import Collection, Self, Union
 
+
 class Perception:
-    def __init__(self,
+    def __init__(
+        self,
         id: str,
         point: shapely.Point,
         region: shapely.Polygon,
-        samples: Collection[Sample]
+        samples: Collection[Sample],
     ) -> None:
         samplesClip: tuple[Sample, ...] = tuple(
-            Perception.clipSamples(samples, region))
+            Perception.clipSamples(samples, region)
+        )
         sampleMap: dict[int, tuple[Sample, ...]] = Perception.mapSamples(
-            samples)
+            samples
+        )
         self.id: str = id
         self.point: shapely.Point = point
         self.cluster: int = Perception.findCluster(point, samplesClip)
@@ -27,31 +31,33 @@ class Perception:
         self.samples: tuple[Sample, ...] = tuple(samplesClip)
         self.sampleMap: dict[int, tuple[Sample, ...]] = sampleMap
         # dict[cluster, tuple[singularValue, rightSingularVector, angle]]
-        self.svd: dict[int, tuple[
-            np.float64,
-            np.ndarray,
-            float
-        ]] = Perception.initSvd(point, sampleMap)
+        self.svd: dict[int, tuple[np.float64, np.ndarray, float]] = (
+            Perception.initSvd(point, sampleMap)
+        )
 
     def __repr__(self) -> str:
         return (
             f"Perception {self.id}: "
-            f"cluster {self.cluster} @ {self.point.__repr__()}")
-    
+            f"cluster {self.cluster} @ {self.point.__repr__()}"
+        )
+
     @staticmethod
     def clipSamples(
-        samples: Collection[Sample],
-        polygon: shapely.Polygon
+        samples: Collection[Sample], polygon: shapely.Polygon
     ) -> list[Sample]:
         samplesList: list[Sample] = list(samples)
-        return geopandas.GeoDataFrame(
-            data={"sample": samplesList},
-            geometry=[sample.getPoint() for sample in samplesList]
-        ).clip(polygon, keep_geom_type=True)["sample"].to_list()
+        return (
+            geopandas.GeoDataFrame(
+                data={"sample": samplesList},
+                geometry=[sample.getPoint() for sample in samplesList],
+            )
+            .clip(polygon, keep_geom_type=True)["sample"]
+            .to_list()
+        )
 
     @staticmethod
     def mapSamples(
-        samples: Collection[Sample]
+        samples: Collection[Sample],
     ) -> dict[int, tuple[Sample, ...]]:
         sampleMap: dict[int, set[Sample]] = dict()
         sample: Sample
@@ -61,31 +67,31 @@ class Perception:
             sampleMap[sample.getCluster()].add(sample)
         return {
             cluster: tuple(sampleSet)
-            for cluster, sampleSet in sampleMap.items()}
-    
+            for cluster, sampleSet in sampleMap.items()
+        }
+
     @staticmethod
     def findCluster(point: shapely.Point, samples: Collection[Sample]) -> int:
         sampleDistances: list[tuple[float, Sample]] = [
-            (point.distance(sample.getPoint()), sample)
-            for sample in samples]
+            (point.distance(sample.getPoint()), sample) for sample in samples
+        ]
         sampleDistances.sort(key=lambda x: x[0])
         return sampleDistances[0][1].getCluster()
-    
+
     @staticmethod
     def initSvd(
-        origin: shapely.Point,
-        sampleMap: dict[int, tuple[Sample, ...]]
+        origin: shapely.Point, sampleMap: dict[int, tuple[Sample, ...]]
     ) -> dict[int, tuple[np.float64, np.ndarray, float]]:
         clusterSvd: dict[int, tuple[np.float64, np.ndarray, float]] = dict()
         cluster: int
         samples: tuple[Sample, ...]
         for cluster, samples in sampleMap.items():
             points: list[shapely.Point] = [
-                sample.getPoint()
-                for sample in samples]
+                sample.getPoint() for sample in samples
+            ]
             a: list[tuple[float, float]] = [
-                (point.x - origin.x, point.y - origin.y)
-                for point in points]
+                (point.x - origin.x, point.y - origin.y) for point in points
+            ]
             U: np.ndarray
             s: np.ndarray
             Vh: np.ndarray
@@ -95,12 +101,13 @@ class Perception:
             angle: float = np.atan2(sVh[0][1][1], sVh[0][1][0])
             clusterSvd[cluster] = (sVh[0][0], sVh[0][1], angle)
         return clusterSvd
-    
+
     def rotationTo(self, other: Self) -> float:
         selfSampleCounts: dict[int, int] = self.sampleCounts()
         otherSampleCounts: dict[int, int] = other.sampleCounts()
         clusterIntersection: set[int] = set(
-            selfSampleCounts.keys()).intersection(set(otherSampleCounts.keys()))
+            selfSampleCounts.keys()
+        ).intersection(set(otherSampleCounts.keys()))
         if len(clusterIntersection) <= 0:
             return 0
         cluster: int
@@ -112,7 +119,7 @@ class Perception:
             for currCluster in clusterIntersection:
                 count: int = min(
                     selfSampleCounts[currCluster],
-                    otherSampleCounts[currCluster]
+                    otherSampleCounts[currCluster],
                 )
                 if count > maxCount:
                     maxCount = count
@@ -127,35 +134,41 @@ class Perception:
         elif 1.5 * math.pi < angle:
             angle = angle - 2 * math.pi
         selfShapelyPoints: list[shapely.Point] = [
-            sample.getPoint()
-            for sample in self.sampleMap[cluster]]
+            sample.getPoint() for sample in self.sampleMap[cluster]
+        ]
         selfPoints: list[tuple[float, float]] = [
             (point.x - self.point.x, point.y - self.point.y)
-            for point in selfShapelyPoints]
+            for point in selfShapelyPoints
+        ]
         otherShapelyPoints: list[shapely.Point] = [
-            sample.getPoint()
-            for sample in other.sampleMap[cluster]]
+            sample.getPoint() for sample in other.sampleMap[cluster]
+        ]
         otherPoints: list[tuple[float, float]] = [
             (point.x - other.point.y, point.y - other.point.y)
-            for point in otherShapelyPoints]
+            for point in otherShapelyPoints
+        ]
         otherPointsRot1 = [
-            Geometric.rotateTuple(point, (0, 0), angle)
-            for point in otherPoints]
+            Geometric.rotateTuple(point, (0, 0), angle) for point in otherPoints
+        ]
         otherPointsRot2 = [
             Geometric.rotateTuple(point, (0, 0), angle + math.pi)
-            for point in otherPoints]
+            for point in otherPoints
+        ]
         distance1: float = stats.wasserstein_distance_nd(
-            selfPoints, otherPointsRot1)
+            selfPoints, otherPointsRot1
+        )
         distance2: float = stats.wasserstein_distance_nd(
-            selfPoints, otherPointsRot2)
+            selfPoints, otherPointsRot2
+        )
         if distance2 > distance1:
             angle = angle + math.pi
         return angle
-    
+
     def distanceTo(self, other: Self, rotation: float) -> float:
         totalDistance: float = 0
         clusters: set[int] = set(self.sampleMap.keys()).union(
-            set(other.sampleMap.keys()))
+            set(other.sampleMap.keys())
+        )
         cluster: int
         for cluster in clusters:
             selfPoints: list[tuple[float, float]]
@@ -168,64 +181,79 @@ class Perception:
                     hasCluster = self
                 shapelyPoints: list[shapely.Point] = [
                     sample.getPoint()
-                    for sample in hasCluster.sampleMap[cluster]]
+                    for sample in hasCluster.sampleMap[cluster]
+                ]
                 points: list[tuple[float, float]] = [
                     (point.x - hasCluster.point.x, point.y - hasCluster.point.y)
-                    for point in shapelyPoints]
+                    for point in shapelyPoints
+                ]
                 shapelyCentroid: shapely.Point = shapely.MultiPoint(
-                    shapelyPoints).centroid
+                    shapelyPoints
+                ).centroid
                 centroid: tuple[float, float] = (
                     shapelyCentroid.x - hasCluster.point.x,
-                    shapelyCentroid.y - hasCluster.point.y
+                    shapelyCentroid.y - hasCluster.point.y,
                 )
                 dummyPoints: list[tuple[float, float]] = [
-                    centroid
-                    for i in range(len(points))]
+                    centroid for i in range(len(points))
+                ]
                 selfPoints = points
                 otherPoints = dummyPoints
             else:
                 selfShapelyPoints: list[shapely.Point] = [
-                    sample.getPoint()
-                    for sample in self.sampleMap[cluster]]
+                    sample.getPoint() for sample in self.sampleMap[cluster]
+                ]
                 selfPoints = [
                     (point.x - self.point.x, point.y - self.point.y)
-                    for point in selfShapelyPoints]
+                    for point in selfShapelyPoints
+                ]
                 otherShapelyPoints: list[shapely.Point] = [
-                    sample.getPoint()
-                    for sample in other.sampleMap[cluster]]
+                    sample.getPoint() for sample in other.sampleMap[cluster]
+                ]
                 otherPoints = [
                     (point.x - other.point.x, point.y - other.point.y)
-                    for point in otherShapelyPoints]
+                    for point in otherShapelyPoints
+                ]
                 if len(selfPoints) < len(otherPoints):
                     otherShapelyCentroid: shapely.Point = shapely.MultiPoint(
-                        otherShapelyPoints).centroid
+                        otherShapelyPoints
+                    ).centroid
                     otherCentroid: tuple[float, float] = (
                         otherShapelyCentroid.x - other.point.x,
-                        otherShapelyCentroid.y - other.point.y
+                        otherShapelyCentroid.y - other.point.y,
                     )
-                    selfPoints.extend([
-                        otherCentroid
-                        for i in range(len(otherPoints) - len(otherPoints))])
+                    selfPoints.extend(
+                        [
+                            otherCentroid
+                            for i in range(len(otherPoints) - len(otherPoints))
+                        ]
+                    )
                 else:
                     selfShapelyCentroid: shapely.Point = shapely.MultiPoint(
-                        selfShapelyPoints).centroid
+                        selfShapelyPoints
+                    ).centroid
                     selfCentroid: tuple[float, float] = (
                         selfShapelyCentroid.x - self.point.x,
-                        selfShapelyCentroid.y - self.point.y
+                        selfShapelyCentroid.y - self.point.y,
                     )
-                    otherPoints.extend([
-                        selfCentroid
-                        for i in range(len(selfPoints) - len(selfPoints))])
+                    otherPoints.extend(
+                        [
+                            selfCentroid
+                            for i in range(len(selfPoints) - len(selfPoints))
+                        ]
+                    )
             otherPoints = [
                 Geometric.rotateTuple(point, (0, 0), rotation)
-                for point in otherPoints] # type: ignore[misc]
+                for point in otherPoints
+            ]  # type: ignore[misc]
             distance: float = stats.wasserstein_distance_nd(
-                selfPoints, otherPoints)
+                selfPoints, otherPoints
+            )
             totalDistance += distance
         return totalDistance
-    
-    def samplesInPolygon(self,
-        polygon: Union[shapely.Polygon, shapely.MultiPolygon]
+
+    def samplesInPolygon(
+        self, polygon: Union[shapely.Polygon, shapely.MultiPolygon]
     ) -> list[Sample]:
         samplesWithin: list[Sample] = list()
         sample: Sample
@@ -233,23 +261,23 @@ class Perception:
             if sample.within(polygon):
                 samplesWithin.append(sample)
         return samplesWithin
-    
+
     def getId(self) -> str:
         return self.id
-    
+
     def getPoint(self) -> shapely.Point:
         return self.point
-    
+
     def getCluster(self) -> int:
         return self.cluster
-    
+
     def getRegion(self) -> shapely.Polygon:
         return self.region
-    
+
     def getSamples(self) -> tuple[Sample, ...]:
         return self.samples
 
     def sampleCounts(self) -> dict[int, int]:
         return {
-            cluster: len(samples)
-            for cluster, samples in self.sampleMap.items()}
+            cluster: len(samples) for cluster, samples in self.sampleMap.items()
+        }

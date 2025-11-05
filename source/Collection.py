@@ -87,7 +87,7 @@ class Collection:
                 destination[0] - perception.getPoint().x,
                 destination[1] - perception.getPoint().y,
             )
-            siteRegion = Geometric.rotateAboutTuple(
+            siteRegion = Geometric.rotateAboutTuple(  # type: ignore[attr-defined]
                 Geometric.translateVectorTuple(
                     perception.getRegion(), translation
                 ),
@@ -95,7 +95,7 @@ class Collection:
                 rotation,
             ).intersection(
                 queryPolygon
-            )  # type: ignore[attr-defined]
+            )
             siteRegions: list[shapely.Polygon] = Geometric.geometryToPolygons(
                 siteRegion
             )

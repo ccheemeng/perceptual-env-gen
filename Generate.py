@@ -1,4 +1,4 @@
-import geopandas
+import geopandas  # type: ignore[import-untyped]
 import pandas as pd
 import shapely
 
@@ -30,19 +30,19 @@ def main(args: argparse.Namespace) -> None:
                 index=(lambda i: str(i))
             )
         index: str
-        multiPolygon: geopandas.GeoSeries
-        for index, multiPolygon in multiPolygonGdf.iterrows():
-            perceptionId: str = transformationDf.loc[index]["perceptionId"]
+        multiPolygonSeries: geopandas.GeoSeries
+        for index, multiPolygonSeries in multiPolygonGdf.iterrows():
+            perceptionId: str = str(transformationDf.loc[index]["perceptionId"])
             translation: tuple[float, float] = tuple(
                 transformationDf.loc[index][["translationX", "translationY"]]
             )
             destination: tuple[float, float] = tuple(
                 transformationDf.loc[index][["destinationX", "destinationY"]]
             )
-            rotation: float = transformationDf.loc[index]["rotationCCW"]
-            multiPolygon: shapely.MultiPolygon = multiPolygon["geometry"]
+            rotation: float = float(transformationDf.loc[index]["rotationCCW"])
+            multiPolygon: shapely.MultiPolygon = multiPolygonSeries["geometry"]
             points: list[shapely.Point] = list()
-            labels: list[shapely.Point] = list()
+            labels: list[int] = list()
             with open(path.join(args.pc_dir, f"{perceptionId}.csv"), "r") as fp:
                 csvreader = csv.reader(fp)
                 for row in csvreader:
@@ -53,7 +53,9 @@ def main(args: argparse.Namespace) -> None:
                         destination,
                         rotation,
                     )
-                    points.append(shapely.Point(pointxy[0], pointxy[1], row[2]))
+                    points.append(
+                        shapely.Point(pointxy[0], pointxy[1], float(row[2]))
+                    )
                     labels.append(int(row[3]))
             pointsGdf: geopandas.GeoDataFrame = geopandas.GeoDataFrame(
                 data={"label": labels}, geometry=points
